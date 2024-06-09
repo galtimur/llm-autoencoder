@@ -93,7 +93,7 @@ class AutoencoderLP(torch.nn.Module):
 
         self.initialize()
 
-    def initialize(self):
+    def initialize(self) -> None:
         print("Freezing the decoder...")
         freeze_model(self.decoder)
         self.decoder.eval()
@@ -109,13 +109,7 @@ class AutoencoderLP(torch.nn.Module):
             self.load_state_dict(state_dict)
             print(f"Finished loading from {self.training_args.restore_from}")
 
-    def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        prompt_answer_ids: torch.LongTensor = None,
-        labels: Optional[torch.LongTensor] = None,
-    ):
-        # encoder part
+    def forward(self, input_ids: torch.LongTensor = None) -> Dict:
         batch_size = input_ids.size(0)
 
         ae_embed = self.embedder(self.ae_tok).repeat(batch_size, 1, 1)

@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import torch
 from datasets import load_dataset
@@ -35,7 +35,13 @@ def split_texts(
 
 
 class AuCoBatcher:
-    def __init__(self, seq_length, batch_size, tokenizer, text_key="text"):
+    def __init__(
+        self,
+        seq_length: int,
+        batch_size: int,
+        tokenizer: AutoTokenizer,
+        text_key: str = "text",
+    ):
         self.batch_size = batch_size
         self.buffer = []
         self.tokenizer = tokenizer
@@ -43,7 +49,6 @@ class AuCoBatcher:
         self.text_key = text_key
 
     def __call__(self, batch: List[Dict]) -> torch.Tensor:
-
         # Just to make memory safe
         if len(self.buffer) > 10000:
             self.buffer = []
@@ -63,9 +68,10 @@ class AuCoBatcher:
         return torch.tensor(batch, device=device)
 
 
-def get_dataloader(
-    split, data_args, training_args, tokenizer, text_key="text"
-) -> DataLoader:
+def get_dataloader(split: str, args: Dict, tokenizer: AutoTokenizer) -> DataLoader:
+    training_args = args["train"]
+    data_args = args["data"]
+
     # TODO make it better. Possibly move to a class
     if split == "train":
         dataset_name = data_args.train_dataset_name
@@ -82,7 +88,7 @@ def get_dataloader(
         seq_length=seg_len,
         batch_size=batch_size,
         tokenizer=tokenizer,
-        text_key=text_key,
+        text_key=data_args.text_key,
     )
 
     dataset = load_dataset(dataset_name, name=data_subset)["train"]
@@ -95,17 +101,10 @@ def get_dataloader(
     return dataloader
 
 
-def get_data(args):
+def get_data(args: Dict) -> Tuple[DataLoader, DataLoader]:
     model_args = args["model"]
-    training_args = args["train"]
-    data_args = args["data"]
-
     tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path)
-    train_dl = get_dataloader(
-        "train", data_args, training_args, tokenizer, text_key=data_args.text_key
-    )
-    val_dl = get_dataloader(
-        "val", data_args, training_args, tokenizer, text_key=data_args.text_key
-    )
+    train_dl = get_dataloader("train", args, tokenizer)
+    val_dl = get_dataloader("val", args, tokenizer)
 
     return train_dl, val_dl

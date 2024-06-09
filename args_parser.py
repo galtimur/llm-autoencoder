@@ -99,7 +99,7 @@ class TrainingArguments(transformers.TrainingArguments):
     )
 
 
-def parse_config(config_path) -> Dict:
+def parse_config(config_path: str) -> Dict:
     with open(config_path, "r") as f:
         config_raw = yaml.safe_load(f)
 

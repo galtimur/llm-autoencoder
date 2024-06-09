@@ -14,6 +14,7 @@ DataArguments:
   train_dataset_subset: null
   val_dataset_name: "wikitext"
   val_dataset_subset: "wikitext-103-raw-v1"
+  text_key: "text"
   rnd_seed: 42
 
 TrainingArguments:
