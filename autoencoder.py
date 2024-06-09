@@ -19,9 +19,10 @@ def print_trainable_parameters(model, print_all_trainable: bool = False) -> None
         all_param += param.numel()
         if param.requires_grad:
             trainable_parameters += param.numel()
-    print(
-        f"trainable params: {trainable_parameters} || all params: {all_param} || trainable%: {100 * trainable_parameters / all_param}"
-    )
+    train_pars_str = f"trainable params: {trainable_parameters}"
+    all_param_str = f"all params: {all_param}"
+    trainable_ratio_str = f"trainable %: {100 * trainable_parameters / all_param}"
+    print(f"{train_pars_str} || {all_param_str} || {trainable_ratio_str}")
     if print_all_trainable:
         for name, param in model.named_parameters():
             if param.requires_grad:
