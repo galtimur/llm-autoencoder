@@ -43,6 +43,11 @@ class AuCoBatcher:
         self.text_key = text_key
 
     def __call__(self, batch: List[Dict]) -> torch.Tensor:
+
+        # Just to make memory safe
+        if len(self.buffer) > 10000:
+            self.buffer = []
+
         batch = [item[self.text_key] for item in batch]
         tokenized_texts = self.tokenizer(batch, truncation=False, padding=False)[
             "input_ids"
