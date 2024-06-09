@@ -1,0 +1,28 @@
+ModelArguments:
+  model_name_or_path: "microsoft/phi-1_5"
+  lora: false
+  lora_r: 128
+  lora_alpha: 32
+  lora_dropout: 0.05
+  lora_bias: "none"
+#  train: true
+
+DataArguments:
+  data_path: null
+  debug_data: false
+  train_dataset_name: "openwebtext"
+  train_dataset_subset: null
+  val_dataset_name: "wikitext"
+  val_dataset_subset: "wikitext-103-raw-v1"
+  rnd_seed: 42
+
+TrainingArguments:
+  cache_dir: null
+  output_dir: /mnt/data2/galimzyanov/llm-autoencoder/output
+  optim: "adamw_torch"
+  batch_size: 10
+  outer_batch_size: 1
+  segment_length: 128
+  compression_rate: 4
+  restore_from: ""
+  bf16: true
