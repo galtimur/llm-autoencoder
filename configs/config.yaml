@@ -29,3 +29,4 @@ TrainingArguments:
   compression_rate: 4
   restore_from: ""
   bf16: true
+  wandb_project_name: "autoencoder"

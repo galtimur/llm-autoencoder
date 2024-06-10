@@ -102,6 +102,7 @@ class TrainingArguments(transformers.TrainingArguments):
             "help": "The checkpoint that should be restored from for fine-tuning"
         },
     )
+    wandb_project_name: str = field(default="autoencoder")
 
 
 def parse_config(config_path: str) -> Dict:

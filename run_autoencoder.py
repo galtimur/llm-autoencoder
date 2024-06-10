@@ -3,6 +3,8 @@ from autoencoder import AutoencoderLP
 from data import get_data
 from train import Trainer
 
+# TODO add Validation
+
 if __name__ == "__main__":
     config_path = "configs/config.yaml"
 
