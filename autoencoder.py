@@ -118,20 +118,14 @@ class AutoencoderLP(torch.nn.Module):
         output = self.encoder(inputs_embeds=input_embeds, output_hidden_states=True)
         summary_embeds = output.hidden_states[-1][:, -self.num_summary :]
 
-        del output
-        torch.cuda.empty_cache()
-
         dec_input_embeds = torch.cat(
             [summary_embeds, ae_embed, segment_input_embeds], dim=1
         )
         decoder_outputs = self.decoder(inputs_embeds=dec_input_embeds)
         logits = decoder_outputs.logits
 
-        logits = logits[:, self.num_summary + 1 : -1, :].reshape(-1, logits.size(-1))
+        logits = logits[:, -self.segment_length: -1, :].reshape(-1, logits.size(-1))
         target_ids = input_ids[:, 1:].reshape(-1)
         loss = self.loss_fn(logits, target_ids)
-
-        del decoder_outputs
-        torch.cuda.empty_cache()
 
         return {"loss": loss, "logits": logits}
