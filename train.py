@@ -34,7 +34,6 @@ class Trainer:
         self.encoder.train()
 
         self.progress_train = tqdm(train_dl, total=len(train_dl))
-        # self.progress_val = tqdm(val_dl, total=self.max_eval_steps)
         self.val_dl = val_dl
 
         model_name = args["model"].model_name_or_path.split("/")[-1]
@@ -42,7 +41,6 @@ class Trainer:
         wandb_run_name += f"cr_{train_args.compression_rate}"
         wandb_run_name += f"seg_{train_args.segment_length}"
         wandb_run_name += f"batch_{batch_size_global}"
-        # TODO make one more key in args - training args, that is setup in config, not default
         wandb.init(
             project=train_args.wandb_project_name, config=args, name=wandb_run_name
         )
