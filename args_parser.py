@@ -53,6 +53,13 @@ class TrainingArguments(transformers.TrainingArguments):
     #     default=28000,
     #     metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
     # )
+    # TODO may be do it in terms of samples or segments
+    max_eval_steps: int = field(
+        default=100,
+        metadata={
+            "help": "How many samples to use for validation."
+        },
+    )
     batch_size_mini: int = field(
         default=1,
         metadata={
@@ -69,7 +76,6 @@ class TrainingArguments(transformers.TrainingArguments):
             "help": "Classic batch size, the input to the model does not depend on this number."
         },
     )
-    epochs: int = field(default=1)
     segment_length: int = field(
         default=128,
         metadata={"help": "Segment length to compress."},
@@ -118,5 +124,7 @@ def parse_config(config_path: str) -> Dict:
         (ModelArguments, DataArguments, TrainingArguments)
     )
     model_args, data_args, training_args = parser.parse_dict(config)
+
+    training_args.learning_rate = float(training_args.learning_rate)
 
     return {"model": model_args, "train": training_args, "data": data_args}
