@@ -11,8 +11,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def split_texts(
     tokenized_texts: List[List[int]], seq_length: int
 ) -> List[torch.Tensor]:
-    # tokenized_texts = [torch.tensor(text) for text in tokenized_texts]
-
     text_segments = []
     text_ids_merged = []
 
@@ -49,9 +47,11 @@ class AuCoBatcher:
         self.text_key = text_key
 
     def __call__(self, batch: List[Dict]) -> torch.Tensor:
-        # Just to make memory safe
+        # Just to make memory-safe
         if len(self.buffer) > 10000:
-            print(f"The buffer has been cleaned. It was too large: {len(self.buffer)} segments")
+            print(
+                f"The buffer has been cleaned. It was too large: {len(self.buffer)} segments"
+            )
             self.buffer = []
 
         batch = [item[self.text_key] for item in batch]

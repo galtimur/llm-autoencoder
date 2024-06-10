@@ -1,24 +1,26 @@
+from typing import Dict
+
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AdamW
-from typing import Dict
+
 import wandb
 
-def calc_grad_norm(model):
 
+def calc_grad_norm(model):
     total_norm = 0
     for name, p in model.named_parameters():
         if p.grad is not None:
             param_norm = p.grad.data.norm(2)
             total_norm += param_norm.item() ** 2
-    total_norm = total_norm ** (1. / 2)
+    total_norm = total_norm ** (1.0 / 2)
 
     return total_norm
 
+
 class Trainer:
     def __init__(self, model, train_dl: DataLoader, val_dl: DataLoader, args: Dict):
-
         train_args = args["train"]
         batch_size_global = train_args.batch_size_global
         self.accumulation_steps = batch_size_global // train_args.batch_size_mini
@@ -43,6 +45,7 @@ class Trainer:
         wandb.init(
             project=train_args.wandb_project_name, config=args, name=wandb_run_name
         )
+        wandb.run.log_code(".")
 
     def train(self) -> None:
         train_loss = 0
@@ -76,8 +79,7 @@ class Trainer:
                     wandb.log(log_dict)
 
     def validate(self):
-
-        print(f"------ Validating ------")
+        print("------ Validating ------")
         self.encoder.eval()
         total_loss = 0
         step = 0

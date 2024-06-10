@@ -17,10 +17,6 @@ class ModelArguments:
     lora_alpha: int = field(default=32, metadata={"help": "lora alpha"})
     lora_bias: str = field(default="none", metadata={"help": "lora bias"})
     lora_dropout: float = field(default=0.05, metadata={"help": "lora dropout"})
-    # train: bool = field(
-    #     default=True,
-    #     metadata={"help": "if true, the model ckpt will be initialized for training; else, it's for inference"}
-    # )
 
 
 @dataclass
@@ -49,16 +45,10 @@ class TrainingArguments(transformers.TrainingArguments):
     cache_dir: Optional[str] = field(default=None)
 
     optim: str = field(default="adamw_torch")
-    # model_max_length: int = field(
-    #     default=28000,
-    #     metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
-    # )
     # TODO may be do it in terms of samples or segments
     max_eval_steps: int = field(
         default=100,
-        metadata={
-            "help": "How many samples to use for validation."
-        },
+        metadata={"help": "How many samples to use for validation."},
     )
     batch_size_mini: int = field(
         default=1,

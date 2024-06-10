@@ -1,6 +1,6 @@
-from typing import Dict, Optional
-
 import copy
+from typing import Dict
+
 import torch
 import torch.nn as nn
 from peft import LoraConfig, get_peft_model
@@ -31,7 +31,7 @@ def print_trainable_parameters(model, print_all_trainable: bool = False) -> None
 
 
 class AutoencoderLP(torch.nn.Module):
-    def __init__(self, args: Dict):  # lora_config
+    def __init__(self, args: Dict):
         super().__init__()
 
         self.model_args = args["model"]

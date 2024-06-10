@@ -4,7 +4,6 @@ from data import get_data
 from train import Trainer
 
 # TODO add linear layer for summary tokens
-#
 
 if __name__ == "__main__":
     config_path = "configs/config.yaml"
