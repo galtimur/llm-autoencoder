@@ -22,16 +22,17 @@ class Trainer:
         train_args = args["train"]
         batch_size_global = train_args.batch_size_global
         self.accumulation_steps = batch_size_global // train_args.batch_size_mini
+        self.num_epochs = train_args.num_train_epochs
+        self.eval_steps = train_args.eval_steps
+        self.max_eval_steps = train_args.max_eval_steps
 
         self.model = model
-        self.num_epochs = train_args.num_train_epochs
         self.encoder = self.model.encoder
         self.optimizer = AdamW(self.encoder.parameters(), lr=train_args.learning_rate)
         self.encoder.train()
+
         self.progress_train = tqdm(train_dl, total=len(train_dl))
-        self.progress_val = tqdm(val_dl, total=len(val_dl))
-        self.eval_steps = train_args.eval_steps
-        self.max_eval_steps = train_args.max_eval_steps
+        self.progress_val = tqdm(val_dl, total=self.max_eval_steps)
 
         model_name = args["model"].model_name_or_path.split("/")[-1]
         wandb_run_name = f"{model_name}"
@@ -44,6 +45,7 @@ class Trainer:
         )
 
     def train(self) -> None:
+        train_loss = 0
         for epoch in range(self.num_epochs):
             print(f"Epoch {epoch+1}/{self.num_epochs}")
 
@@ -54,15 +56,19 @@ class Trainer:
                 outputs = self.model(item)
                 loss = outputs["loss"]
                 loss /= self.accumulation_steps
+                train_loss += loss.item()
                 loss.backward()
 
                 if step % self.accumulation_steps == 0:
                     self.optimizer.step()
-                    self.progress_train.set_postfix({"loss": loss.item()}, refresh=True)
                     grad_norm = calc_grad_norm(self.encoder)
-                    self.optimizer.zero_grad()
-                    log_dict = {"loss": loss.item(), "grad_norm": grad_norm}
+
+                    self.progress_train.set_postfix({"loss": train_loss}, refresh=True)
+                    log_dict = {"loss": train_loss, "grad_norm": grad_norm}
                     wandb.log(log_dict)
+
+                    self.optimizer.zero_grad()
+                    train_loss = 0
 
                 if step % self.eval_steps == 0:
                     loss = self.validate()
@@ -74,17 +80,17 @@ class Trainer:
         print(f"------ Validating ------")
         self.encoder.eval()
         total_loss = 0
+        step = 0
 
-
-        for step, item in enumerate(self.progress_val, start=1):
+        for item in self.progress_val:
             if item is None:
                 continue
             with torch.no_grad():
                 outputs = self.model(item)
             loss = outputs["loss"].item()
             total_loss += loss
-
-            if step > self.max_eval_steps:
+            step += 1
+            if step >= self.max_eval_steps:
                 break
 
         val_loss = total_loss / step

@@ -22,7 +22,7 @@ TrainingArguments:
   output_dir: /mnt/data2/galimzyanov/llm-autoencoder/output
   optim: "adamw_torch"
   batch_size_mini: 10
-  batch_size_global: 20
+  batch_size_global: 100
   batch_size_outer: 1
   num_train_epochs: 1
   segment_length: 128

@@ -51,6 +51,7 @@ class AuCoBatcher:
     def __call__(self, batch: List[Dict]) -> torch.Tensor:
         # Just to make memory safe
         if len(self.buffer) > 10000:
+            print(f"The buffer has been cleaned. It was too large: {len(self.buffer)} segments")
             self.buffer = []
 
         batch = [item[self.text_key] for item in batch]
