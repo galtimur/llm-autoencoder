@@ -81,12 +81,12 @@ def get_dataloader(split: str, args: Dict, tokenizer: AutoTokenizer) -> DataLoad
         data_subset = data_args.val_dataset_subset
 
     seg_len = training_args.segment_length
-    batch_size = training_args.batch_size
-    outer_batch_size = training_args.outer_batch_size
+    batch_size_mini = training_args.batch_size_mini
+    batch_size_outer = training_args.batch_size_outer
 
     custom_batcher = AuCoBatcher(
         seq_length=seg_len,
-        batch_size=batch_size,
+        batch_size=batch_size_mini,
         tokenizer=tokenizer,
         text_key=data_args.text_key,
     )
@@ -95,7 +95,7 @@ def get_dataloader(split: str, args: Dict, tokenizer: AutoTokenizer) -> DataLoad
     dataset = dataset.shuffle(data_args.rnd_seed)
 
     dataloader = DataLoader(
-        dataset, batch_size=outer_batch_size, collate_fn=custom_batcher
+        dataset, batch_size=batch_size_outer, collate_fn=custom_batcher
     )
 
     return dataloader

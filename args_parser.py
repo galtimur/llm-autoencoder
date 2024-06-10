@@ -53,18 +53,23 @@ class TrainingArguments(transformers.TrainingArguments):
     #     default=28000,
     #     metadata={"help": "Maximum sequence length. Sequences will be right padded (and possibly truncated)."},
     # )
-    batch_size: int = field(
+    batch_size_mini: int = field(
         default=1,
         metadata={
             "help": "Number of segments passed to a model (each item is splitted into segments)."
         },
     )
-    outer_batch_size: int = field(
+    batch_size_global: int = field(
+        default=1,
+        metadata={"help": "Global batch size, including batch accumulation."},
+    )
+    batch_size_outer: int = field(
         default=1,
         metadata={
             "help": "Classic batch size, the input to the model does not depend on this number."
         },
     )
+    epochs: int = field(default=1)
     segment_length: int = field(
         default=128,
         metadata={"help": "Segment length to compress."},

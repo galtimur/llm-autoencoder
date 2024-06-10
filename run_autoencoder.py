@@ -1,7 +1,7 @@
 from args_parser import parse_config
 from autoencoder import AutoencoderLP
 from data import get_data
-from train import train
+from train import Trainer
 
 if __name__ == "__main__":
     config_path = "configs/config.yaml"
@@ -10,6 +10,7 @@ if __name__ == "__main__":
 
     train_dl, val_dl = get_data(args)
     autoencoder = AutoencoderLP(args)
+    trainer = Trainer(autoencoder, train_dl, args)
 
-    train(autoencoder, train_dl)
+    trainer.train()
     print(1)

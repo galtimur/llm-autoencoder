@@ -21,8 +21,10 @@ TrainingArguments:
   cache_dir: null
   output_dir: /mnt/data2/galimzyanov/llm-autoencoder/output
   optim: "adamw_torch"
-  batch_size: 10
-  outer_batch_size: 1
+  batch_size_mini: 10
+  batch_size_global: 100
+  batch_size_outer: 1
+  epochs: 1
   segment_length: 128
   compression_rate: 4
   restore_from: ""

@@ -1,5 +1,6 @@
 from typing import Dict, Optional
 
+import copy
 import torch
 import torch.nn as nn
 from peft import LoraConfig, get_peft_model
@@ -39,24 +40,17 @@ class AutoencoderLP(torch.nn.Module):
         dtype = torch.float16 if self.training_args.bf16 is False else torch.bfloat16
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.model = AutoModelForCausalLM.from_pretrained(
+        self.encoder = AutoModelForCausalLM.from_pretrained(
             self.model_name, torch_dtype=dtype, attn_implementation="flash_attention_2"
         )
-        self.model = self.model.to(device)
+        self.encoder = self.encoder.to(device)
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-
-        self.decoder = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            torch_dtype=dtype,
-            use_flash_attention_2="flash_attention_2",
-        )
-        self.decoder = self.decoder.to(device)
 
         self.compression_rate = self.training_args.compression_rate
         self.segment_length = self.training_args.segment_length
         self.num_summary = self.segment_length // self.compression_rate
 
-        self.vocab_size = self.model.config.vocab_size
+        self.vocab_size = self.encoder.config.vocab_size
         self.pad_id = self.vocab_size
         self.ae_id = self.vocab_size + 1
         self.vocab_size += 2  # + [PAD] token + [AE] token
@@ -64,9 +58,9 @@ class AutoencoderLP(torch.nn.Module):
 
         self.bos_id = self.tokenizer.bos_token_id
         self.eos_id = self.tokenizer.eos_token_id
-        self.model.config.pad_token_id = self.pad_id
-        self.model.config.bos_token_id = self.bos_id
-        self.model.config.eos_token_id = self.eos_id
+        self.encoder.config.pad_token_id = self.pad_id
+        self.encoder.config.bos_token_id = self.bos_id
+        self.encoder.config.eos_token_id = self.eos_id
         self.summ_tokens = torch.arange(
             self.vocab_size - self.num_summary,
             self.vocab_size,
@@ -75,10 +69,13 @@ class AutoencoderLP(torch.nn.Module):
         ).unsqueeze(0)
         self.ae_tok = torch.tensor([[self.ae_id]], device=device)
 
-        self.model.resize_token_embeddings(self.vocab_size)
-        self.embedder = self.model.model.embed_tokens
-        self.dim = self.model.config.hidden_size
+        self.encoder.resize_token_embeddings(self.vocab_size)
+        self.embedder = self.encoder.model.embed_tokens
+        self.decoder = copy.deepcopy(self.encoder)
 
+        self.dim = self.encoder.config.hidden_size
+
+        # TODO LORA has not been tested
         if self.model_args.lora:
             lora_config = LoraConfig(
                 r=self.model_args.lora_r,
@@ -87,7 +84,7 @@ class AutoencoderLP(torch.nn.Module):
                 bias=self.model_args.lora_bias,
                 task_type="CAUSAL_LM",
             )
-            self.model = get_peft_model(self.model, lora_config)
+            self.encoder = get_peft_model(self.encoder, lora_config)
 
         self.loss_fn = nn.CrossEntropyLoss(ignore_index=-100)
 
@@ -118,7 +115,7 @@ class AutoencoderLP(torch.nn.Module):
         input_embeds = self.embedder(segment_input_ids)
         segment_input_embeds = input_embeds[:, self.num_summary :]
 
-        output = self.model(inputs_embeds=input_embeds, output_hidden_states=True)
+        output = self.encoder(inputs_embeds=input_embeds, output_hidden_states=True)
         summary_embeds = output.hidden_states[-1][:, -self.num_summary :]
 
         del output
