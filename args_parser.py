@@ -12,6 +12,11 @@ os.environ["NCCL_IB_DISABLE"] = "1"
 @dataclass
 class ModelArguments:
     model_name_or_path: str = field(default="mistralai/Mistral-7B-v0.1")
+    pretrained_encoder: bool = field(default=True, metadata={"help": "Start from pretrained encoder"})
+    pretrained_decoder: bool = field(default=True, metadata={"help": "Start from pretrained decoder"})
+    freeze_encoder: bool = field(default=False, metadata={"help": "Do not train encoder"})
+    freeze_decoder: bool = field(default=True, metadata={"help": "Do not train decoder"})
+    share_enc_dec: bool = field(default=False, metadata={"help": "Use same instance for decoder and encoder"})
     lora: bool = field(default=False, metadata={"help": "Whether to use LORA"})
     lora_r: int = field(default=128, metadata={"help": "lora rank"})
     lora_alpha: int = field(default=32, metadata={"help": "lora alpha"})
@@ -101,6 +106,24 @@ class TrainingArguments(transformers.TrainingArguments):
     wandb_project_name: str = field(default="autoencoder")
 
 
+def process_args(model_args, data_args, training_args):
+
+    training_args.learning_rate = float(training_args.learning_rate)
+    if model_args.freeze_decoder and model_args.freeze_encoder:
+        print("!!!! NOTE that you freezed both encoder and decoder")
+    if model_args.share_enc_dec:
+        eq_freeze = model_args.freeze_decoder == model_args.freeze_encoder
+        eq_pretrained = model_args.pretrained_decoder == model_args.pretrained_encoder
+        if not (eq_freeze and eq_pretrained):
+            raise ValueError("If you share decoder and encoder, the freezing and pretraining flags should be equal")
+    if model_args.freeze_decoder and not model_args.pretrained_decoder:
+        print("!!!! NOTE you freezed not pretrained decoder")
+    if model_args.freeze_encoder and not model_args.pretrained_encoder:
+        print("!!!! NOTE you freezed not pretrained encoder")
+
+    return model_args, data_args, training_args
+
+
 def parse_config(config_path: str) -> Dict:
     with open(config_path, "r") as f:
         config_raw = yaml.safe_load(f)
@@ -114,7 +137,6 @@ def parse_config(config_path: str) -> Dict:
         (ModelArguments, DataArguments, TrainingArguments)
     )
     model_args, data_args, training_args = parser.parse_dict(config)
-
-    training_args.learning_rate = float(training_args.learning_rate)
+    model_args, data_args, training_args = process_args(model_args, data_args, training_args)
 
     return {"model": model_args, "train": training_args, "data": data_args, "train_short": config_raw["TrainingArguments"]}

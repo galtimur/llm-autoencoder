@@ -12,6 +12,9 @@ def freeze_model(model) -> None:
     for _, param in model.named_parameters():
         param.requires_grad = False
 
+def reset_parameters(model):
+    for p in model.parameters():
+        nn.init.xavier_normal(p)
 
 def print_trainable_parameters(model, print_all_trainable: bool = False) -> None:
     trainable_parameters = 0
@@ -71,7 +74,11 @@ class AutoencoderLP(torch.nn.Module):
 
         self.encoder.resize_token_embeddings(self.vocab_size)
         self.embedder = self.encoder.model.embed_tokens
-        self.decoder = copy.deepcopy(self.encoder)
+
+        if self.model_args.share_enc_dec:
+            self.decoder = self.encoder
+        else:
+            self.decoder = copy.deepcopy(self.encoder)
 
         self.dim = self.encoder.config.hidden_size
 
@@ -92,8 +99,12 @@ class AutoencoderLP(torch.nn.Module):
 
     def initialize(self) -> None:
         print("Freezing the decoder...")
-        freeze_model(self.decoder)
-        self.decoder.eval()
+        if self.model_args.freeze_decoder:
+            freeze_model(self.decoder)
+            self.decoder.eval()
+        if self.model_args.freeze_encoder:
+            freeze_model(self.encoder)
+            self.encoder.eval()
         print_trainable_parameters(self)
         if (
             self.training_args.restore_from is not None

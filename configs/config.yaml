@@ -1,5 +1,10 @@
 ModelArguments:
   model_name_or_path: "microsoft/phi-1_5"
+  pretrained_encoder: true
+  pretrained_decoder: true
+  freeze_encoder: false
+  freeze_decoder: true
+  share_enc_dec: false
   lora: false
   lora_r: 128
   lora_alpha: 32
