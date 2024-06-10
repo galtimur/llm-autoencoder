@@ -34,7 +34,8 @@ class Trainer:
         self.encoder.train()
 
         self.progress_train = tqdm(train_dl, total=len(train_dl))
-        self.progress_val = tqdm(val_dl, total=self.max_eval_steps)
+        # self.progress_val = tqdm(val_dl, total=self.max_eval_steps)
+        self.val_dl = val_dl
 
         model_name = args["model"].model_name_or_path.split("/")[-1]
         wandb_run_name = f"{model_name}"
@@ -51,8 +52,9 @@ class Trainer:
         train_loss = 0
         for epoch in range(self.num_epochs):
             print(f"Epoch {epoch+1}/{self.num_epochs}")
+            step = 1
 
-            for step, item in enumerate(self.progress_train, start=1):
+            for item in self.progress_train:
                 if item is None:
                     continue
 
@@ -78,19 +80,24 @@ class Trainer:
                     log_dict = {"val/loss": loss}
                     wandb.log(log_dict)
 
+                step += 1
+
     def validate(self):
         print("------ Validating ------")
         self.encoder.eval()
         total_loss = 0
         step = 0
 
-        for item in self.progress_val:
+        progress = tqdm(total=self.max_eval_steps, leave=True)
+        for item in self.val_dl:
             if item is None:
                 continue
             with torch.no_grad():
                 outputs = self.model(item)
             loss = outputs["loss"].item()
             total_loss += loss
+            progress.update()
+            progress.refresh()
             step += 1
             if step >= self.max_eval_steps:
                 break

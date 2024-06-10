@@ -117,4 +117,4 @@ def parse_config(config_path: str) -> Dict:
 
     training_args.learning_rate = float(training_args.learning_rate)
 
-    return {"model": model_args, "train": training_args, "data": data_args}
+    return {"model": model_args, "train": training_args, "data": data_args, "train_short": config_raw["TrainingArguments"]}
