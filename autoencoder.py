@@ -113,7 +113,7 @@ class AutoencoderLP(torch.nn.Module):
         summ_tokens = self.summ_tokens.repeat(batch_size, 1)
         segment_input_ids = torch.cat([input_ids, summ_tokens], dim=1)
         input_embeds = self.embedder(segment_input_ids)
-        segment_input_embeds = input_embeds[:, self.num_summary :]
+        segment_input_embeds = input_embeds[:, :self.segment_length]
 
         output = self.encoder(inputs_embeds=input_embeds, output_hidden_states=True)
         summary_embeds = output.hidden_states[-1][:, -self.num_summary :]
@@ -122,6 +122,7 @@ class AutoencoderLP(torch.nn.Module):
             [summary_embeds, ae_embed, segment_input_embeds], dim=1
         )
         decoder_outputs = self.decoder(inputs_embeds=dec_input_embeds)
+        # decoder_outputs = self.decoder(inputs_embeds=segment_input_embeds)
         logits = decoder_outputs.logits
 
         logits = logits[:, -self.segment_length: -1, :].reshape(-1, logits.size(-1))
