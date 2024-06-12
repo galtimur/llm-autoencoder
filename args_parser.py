@@ -1,6 +1,6 @@
 import os
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 import transformers
 import yaml
@@ -32,11 +32,13 @@ class ModelArguments:
         default=True,
         metadata={"help": "Init decoder with same weights as encoder if possible"},
     )
-    lora: bool = field(default=False, metadata={"help": "Whether to use LORA"})
+    lora_encoder: bool = field(default=False, metadata={"help": "Whether to use LORA on encoder"})
+    lora_decoder: bool = field(default=False, metadata={"help": "Whether to use LORA on decoder"})
     lora_r: int = field(default=128, metadata={"help": "lora rank"})
     lora_alpha: int = field(default=32, metadata={"help": "lora alpha"})
     lora_bias: str = field(default="none", metadata={"help": "lora bias"})
     lora_dropout: float = field(default=0.05, metadata={"help": "lora dropout"})
+    lora_target_modules: List[str] = field(default=list)
 
 
 @dataclass
