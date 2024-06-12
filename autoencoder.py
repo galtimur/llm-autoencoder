@@ -80,9 +80,8 @@ class AutoencoderLP(torch.nn.Module):
         # Getting the base models: encoder and decoder
         self.trainable_modules = []
         self.model_name = self.model_args.model_name_or_path
-        self.dtype = (
-            torch.float16 if self.training_args.bf16 is False else torch.bfloat16
-        )
+        self.dtype = torch.bfloat16 if self.training_args.bf16 else torch.float16
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.encoder = get_model(
             self.model_name, self.device, self.dtype, self.model_args.pretrained_encoder
@@ -98,6 +97,8 @@ class AutoencoderLP(torch.nn.Module):
             self.model_args.pretrained_decoder,
         )
         self.expand_vocab(self.decoder, vocab_size)
+        self.linear = nn.Linear(self.dim, self.dim, device=self.device, dtype=self.dtype)
+        self.trainable_modules.append(self.linear)
 
         # TODO LORA has not been tested
         if self.model_args.lora:
@@ -188,7 +189,7 @@ class AutoencoderLP(torch.nn.Module):
         # 2. Encode sequence, get summary_embeddings.
         output = self.encoder(inputs_embeds=input_embeds, output_hidden_states=True)
         summary_embeds = output.hidden_states[-1][:, -self.num_summary :]
-
+        summary_embeds = self.linear(summary_embeds)
         # 2. Decoder input consists of summary_embeddings, autoencoder token embed and original sequence.
         dec_input_embeds = torch.cat(
             [summary_embeds, ae_embed, segment_input_embeds], dim=1

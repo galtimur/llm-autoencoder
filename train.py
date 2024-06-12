@@ -35,7 +35,6 @@ class Trainer:
         trainable_parameters = []
         for module in self.model.trainable_modules:
             trainable_parameters.extend(module.parameters())
-        self.encoder = self.model.encoder
         self.optimizer = AdamW(trainable_parameters, lr=train_args.learning_rate)
         self.set_train()
 
