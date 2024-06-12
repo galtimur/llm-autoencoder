@@ -44,9 +44,9 @@ class Trainer:
         # Initialize wandb
         model_name = args["model"].model_name_or_path.split("/")[-1]
         wandb_run_name = f"{model_name}"
-        wandb_run_name += f"cr_{train_args.compression_rate}"
-        wandb_run_name += f"seg_{train_args.segment_length}"
-        wandb_run_name += f"batch_{batch_size_global}"
+        wandb_run_name += f"_cr_{train_args.compression_rate}"
+        wandb_run_name += f"_seg_{train_args.segment_length}"
+        wandb_run_name += f"_batch_{batch_size_global}"
         wandb.init(
             project=train_args.wandb_project_name, config=args, name=wandb_run_name
         )
