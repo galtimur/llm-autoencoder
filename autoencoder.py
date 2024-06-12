@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from peft import LoraConfig, get_peft_model
 from safetensors.torch import load_file
-from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 
 def freeze_model(model) -> None:
@@ -58,6 +58,15 @@ def get_embedder(model: AutoModelForCausalLM) -> nn.Embedding:
 
 
 class AutoencoderLP(torch.nn.Module):
+    """
+    AutoencoderLP is an autoencoder language model that leverages existing LLMs,
+    in which encoder encodes the text segments into the summary embedding vectors,
+    decoder decodes them into the original sequence.
+
+    The basic architecture is described in (fig. 3):
+    https://arxiv.org/pdf/2307.06945
+    """
+
     def __init__(self, args: Dict):
         super().__init__()
 
@@ -68,7 +77,8 @@ class AutoencoderLP(torch.nn.Module):
         self.segment_length = self.training_args.segment_length
         self.num_summary = self.segment_length // self.compression_rate
 
-        # Getting the base models
+        # Getting the base models: encoder and decoder
+        self.trainable_modules = []
         self.model_name = self.model_args.model_name_or_path
         self.dtype = (
             torch.float16 if self.training_args.bf16 is False else torch.bfloat16
@@ -100,6 +110,11 @@ class AutoencoderLP(torch.nn.Module):
             )
             self.encoder = get_peft_model(self.encoder, lora_config)
 
+        if not self.model_args.freeze_decoder:
+            self.trainable_modules.append(self.decoder)
+        if not self.model_args.freeze_encoder:
+            self.trainable_modules.append(self.encoder)
+
         self.loss_fn = nn.CrossEntropyLoss(ignore_index=-100)
 
         self.initialize()
@@ -126,7 +141,6 @@ class AutoencoderLP(torch.nn.Module):
         model.config.bos_token_id = self.bos_id
         model.config.eos_token_id = self.eos_id
         model.resize_token_embeddings(vocab_size)
-
 
     def get_decoder(
         self, share_enc_dec: bool, init_same_weights: bool, pretrained_decoder: bool
@@ -165,20 +179,24 @@ class AutoencoderLP(torch.nn.Module):
 
         ae_embed = self.embedder(self.ae_tok).repeat(batch_size, 1, 1)
         summ_tokens = self.summ_tokens.repeat(batch_size, 1)
+
+        # 1. Append summary tokens to each segment. Embed them.
         segment_input_ids = torch.cat([input_ids, summ_tokens], dim=1)
         input_embeds = self.embedder(segment_input_ids)
         segment_input_embeds = input_embeds[:, : self.segment_length]
 
+        # 2. Encode sequence, get summary_embeddings.
         output = self.encoder(inputs_embeds=input_embeds, output_hidden_states=True)
         summary_embeds = output.hidden_states[-1][:, -self.num_summary :]
 
+        # 2. Decoder input consists of summary_embeddings, autoencoder token embed and original sequence.
         dec_input_embeds = torch.cat(
             [summary_embeds, ae_embed, segment_input_embeds], dim=1
         )
         decoder_outputs = self.decoder(inputs_embeds=dec_input_embeds)
-        # decoder_outputs = self.decoder(inputs_embeds=segment_input_embeds)
         logits = decoder_outputs.logits
 
+        # 3. Calculate loss on the original sequence.
         logits = logits[:, -self.segment_length : -1, :].reshape(-1, logits.size(-1))
         target_ids = input_ids[:, 1:].reshape(-1)
         loss = self.loss_fn(logits, target_ids)

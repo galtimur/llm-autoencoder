@@ -5,7 +5,7 @@ from train import Trainer
 
 # TODO add linear layer for summary tokens
 # TODO implement save/load
-# TODO do preliminary calculation of the model's perplexity.
+# TODO do initial calculation of the model's perplexity to set the bar.
 
 if __name__ == "__main__":
     config_path = "configs/config.yaml"

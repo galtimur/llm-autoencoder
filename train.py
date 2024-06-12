@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 
 import torch
 from torch.utils.data import DataLoader
@@ -8,12 +8,13 @@ from transformers import AdamW
 import wandb
 
 
-def calc_grad_norm(model):
+def calc_grad_norm(module_list: List) -> float:
     total_norm = 0
-    for name, p in model.named_parameters():
-        if p.grad is not None:
-            param_norm = p.grad.data.norm(2)
-            total_norm += param_norm.item() ** 2
+    for module in module_list:
+        for name, p in module.named_parameters():
+            if p.grad is not None:
+                param_norm = p.grad.data.norm(2)
+                total_norm += param_norm.item() ** 2
     total_norm = total_norm ** (1.0 / 2)
 
     return total_norm
@@ -29,13 +30,19 @@ class Trainer:
         self.max_eval_steps = train_args.max_eval_steps
 
         self.model = model
+        # trainable_modules are modules to be trained.
+        # It could be encoder and/or decoder, linear layer (has not been implemented)
+        trainable_parameters = []
+        for module in self.model.trainable_modules:
+            trainable_parameters.extend(module.parameters())
         self.encoder = self.model.encoder
-        self.optimizer = AdamW(self.encoder.parameters(), lr=train_args.learning_rate)
-        self.encoder.train()
+        self.optimizer = AdamW(trainable_parameters, lr=train_args.learning_rate)
+        self.set_train()
 
         self.progress_train = tqdm(train_dl, total=len(train_dl))
         self.val_dl = val_dl
 
+        # Initialize wandb
         model_name = args["model"].model_name_or_path.split("/")[-1]
         wandb_run_name = f"{model_name}"
         wandb_run_name += f"cr_{train_args.compression_rate}"
@@ -46,6 +53,21 @@ class Trainer:
         )
         wandb.run.log_code(".")
 
+    @staticmethod
+    def change_model_mode(module_list: List, mode: str) -> None:
+        if mode not in ["eval", "train"]:
+            ValueError('mode should be "eval" or "train"')
+        if mode == "eval":
+            [module.eval() for module in module_list]
+        if mode == "train":
+            [module.train() for module in module_list]
+
+    def set_train(self) -> None:
+        self.change_model_mode(self.model.trainable_modules, "train")
+
+    def set_eval(self) -> None:
+        self.change_model_mode(self.model.trainable_modules, "eval")
+
     def train(self) -> None:
         train_loss = 0
         for epoch in range(self.num_epochs):
@@ -53,6 +75,7 @@ class Trainer:
             step = 1
 
             for item in self.progress_train:
+                # datoloader can return None sometimes, since it accumulates buffer of segments
                 if item is None:
                     continue
 
@@ -62,10 +85,10 @@ class Trainer:
                 train_loss += loss.item()
                 loss.backward()
 
+                # grad step
                 if step % self.accumulation_steps == 0:
                     self.optimizer.step()
-                    grad_norm = calc_grad_norm(self.encoder)
-
+                    grad_norm = calc_grad_norm(self.model.trainable_modules)
                     self.progress_train.set_postfix({"loss": train_loss}, refresh=True)
                     log_dict = {"loss": train_loss, "grad_norm": grad_norm}
                     wandb.log(log_dict)
@@ -73,6 +96,7 @@ class Trainer:
                     self.optimizer.zero_grad()
                     train_loss = 0
 
+                # validation
                 if step % self.eval_steps == 0:
                     loss = self.validate()
                     log_dict = {"val/loss": loss}
@@ -82,12 +106,13 @@ class Trainer:
 
     def validate(self):
         print("------ Validating ------")
-        self.encoder.eval()
+        self.set_eval()
         total_loss = 0
         step = 0
 
         progress = tqdm(total=self.max_eval_steps, leave=True)
         for item in self.val_dl:
+            # datoloader can return None sometimes, since it accumulates buffer of segments
             if item is None:
                 continue
             with torch.no_grad():
@@ -101,5 +126,5 @@ class Trainer:
                 break
 
         val_loss = total_loss / step
-        self.encoder.train()
+        self.set_train()
         return val_loss
