@@ -165,6 +165,7 @@ class AutoencoderLP(torch.nn.Module):
         self.loss_fn = nn.CrossEntropyLoss(ignore_index=-100)
 
         self.initialize()
+        pass
 
     # def add_tokens_old(self, vocab_size: int) -> int:
     #     self.pad_id = vocab_size

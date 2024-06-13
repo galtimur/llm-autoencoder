@@ -1,4 +1,7 @@
+import shutil
 from typing import Dict, List
+import os.path
+from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
@@ -19,6 +22,17 @@ def calc_grad_norm(module_list: List) -> float:
 
     return total_norm
 
+def save_model(model, checkpoint_path: str | Path, current_state: dict):
+    tokens = current_state["tokens"]
+    loss = current_state["loss"]
+    checkpoint_path = os.path.join(checkpoint_path, "checkpoint.pt")
+    torch.save({
+        'tokens': tokens,
+        'model_state_dict': model.state_dict(),
+        # 'optimizer_state_dict': optimizer.state_dict(),
+        'loss': loss,
+    }, checkpoint_path)
+
 
 class Trainer:
     def __init__(self, model, train_dl: DataLoader, val_dl: DataLoader, args: Dict):
@@ -31,6 +45,8 @@ class Trainer:
         self.num_epochs = self.train_args.num_train_epochs
         self.eval_steps = self.train_args.eval_steps
         self.max_eval_steps = self.train_args.max_eval_steps
+        self.save_steps = self.train_args.save_steps
+        self.output_dir = self.train_args.output_dir
 
         self.model = model
         # trainable_modules are modules to be trained.
@@ -46,6 +62,7 @@ class Trainer:
 
         # Initialize wandb
         self.wandb_init()
+        shutil.copy("configs/config.yaml", os.path.join(self.output_dir, "config.yaml"))
 
     def wandb_init(self):
         model_name = self.args["model"].model_name_or_path.split("/")[-1]
@@ -86,7 +103,7 @@ class Trainer:
             step = 1
 
             for item in self.progress_train:
-                # datoloader can return None sometimes, since it accumulates buffer of segments
+                # dataloader can return None sometimes, since it accumulates buffer of segments
                 if item is None:
                     continue
                 tokens_consumed += item.numel()
@@ -122,6 +139,14 @@ class Trainer:
                     }
                     wandb.log(log_dict)
 
+                if step % self.save_steps == 0:
+                    print(f"Saving checkpoint to {self.output_dir}")
+                    if isinstance(loss, torch.Tensor):
+                        loss_float = loss.item()
+                    else:
+                        loss_float = loss
+                    current_state = {"tokens": tokens_consumed, "loss": loss_float}
+                    save_model(self.model, self.output_dir, current_state)
                 step += 1
 
     def validate(self):
@@ -132,7 +157,7 @@ class Trainer:
 
         progress = tqdm(total=self.max_eval_steps, leave=True)
         for item in self.val_dl:
-            # datoloader can return None sometimes, since it accumulates buffer of segments
+            # dataloader can return None sometimes, since it accumulates buffer of segments
             if item is None:
                 continue
             with torch.no_grad():
