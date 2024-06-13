@@ -11,7 +11,7 @@ os.environ["NCCL_IB_DISABLE"] = "1"
 
 @dataclass
 class ModelArguments:
-    model_name_or_path: str = field(default="mistralai/Mistral-7B-v0.1")
+    model_name_or_path: str = field(default=None)
     flash_attn: bool = field(default=True)
     pretrained_encoder: bool = field(
         default=True, metadata={"help": "Start from pretrained encoder"}
@@ -32,6 +32,10 @@ class ModelArguments:
         default=True,
         metadata={"help": "Init decoder with same weights as encoder if possible"},
     )
+    use_linear_layer: bool = field(
+        default=True,
+        metadata={"help": "Apply linear layer to memory embeds between ancoder and decoder"},
+    )
     lora_encoder: bool = field(default=False, metadata={"help": "Whether to use LORA on encoder"})
     lora_decoder: bool = field(default=False, metadata={"help": "Whether to use LORA on decoder"})
     lora_r: int = field(default=128, metadata={"help": "lora rank"})
@@ -39,6 +43,9 @@ class ModelArguments:
     lora_bias: str = field(default="none", metadata={"help": "lora bias"})
     lora_dropout: float = field(default=0.05, metadata={"help": "lora dropout"})
     lora_target_modules: List[str] = field(default=list)
+    alter_model: bool = field(default=False, metadata={"help": "Change model hyperparameters. Works only model is not pretrained"})
+    hidden_size: int = field(default=None)
+    num_layers: int = field(default=None)
 
 
 @dataclass

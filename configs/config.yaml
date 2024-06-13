@@ -1,11 +1,15 @@
 ModelArguments:
   model_name_or_path: "microsoft/phi-1_5"
-  pretrained_encoder: true
-  pretrained_decoder: true
+  pretrained_encoder: false
+  pretrained_decoder: false
   freeze_encoder: false
-  freeze_decoder: true
+  freeze_decoder: false
   share_enc_dec: false
-  init_same_weights: true
+  init_same_weights: false
+  use_linear_layer: true
+  alter_model: true
+  hidden_size: 786
+  num_layers: 16
   lora_encoder: false
   lora_decoder: false
   lora_r: 16
@@ -29,15 +33,15 @@ TrainingArguments:
   cache_dir: null
   output_dir: /mnt/data2/galimzyanov/llm-autoencoder/output
   optim: "adamw_torch"
-  batch_size_mini: 5
+  batch_size_mini: 10
   batch_size_global: 100
   batch_size_outer: 1
   num_train_epochs: 1
   segment_length: 128
-  compression_rate: 1
+  compression_rate: 4
   restore_from: ""
   bf16: true
   wandb_project_name: "autoencoder"
   eval_steps: 2000
   max_eval_steps: 600
-  learning_rate: 1e-2
+  learning_rate: 1e-3

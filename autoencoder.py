@@ -29,9 +29,15 @@ def print_trainable_parameters(model, print_all_trainable: bool = False) -> None
             if param.requires_grad:
                 print(name, param.shape)
 
+def print_num_parameters(model, model_name: str="") -> None:
+    total_params = sum(p.numel() for p in model.parameters())
+    add_model_name = ""
+    if len(model_name) > 0:
+        add_model_name = f" in {model_name}"
+    print(f"Number of parameters{add_model_name}: {total_params / 1e6:.0f}M")
 
 def get_model(
-    model_name: str, device: torch.device | str, dtype: torch.dtype, is_pretrained: bool
+    model_name: str, device: torch.device | str, dtype: torch.dtype, is_pretrained: bool, alter_model: bool = False, model_pars: Dict = None
 ) -> AutoModelForCausalLM:
     if is_pretrained:
         model = AutoModelForCausalLM.from_pretrained(
@@ -39,9 +45,14 @@ def get_model(
         )
     else:
         config_model = AutoConfig.from_pretrained(model_name)
+        if alter_model:
+            config_model.hidden_size = model_pars["hidden_size"]
+            config_model.intermediate_size = 4*model_pars["hidden_size"]
+            config_model.num_hidden_layers = model_pars["num_layers"]
         model = AutoModelForCausalLM.from_config(
             config_model, torch_dtype=dtype, attn_implementation="flash_attention_2"
         )
+    print_num_parameters(model)
     return model.to(device)
 
 
@@ -99,6 +110,7 @@ class AutoencoderLP(torch.nn.Module):
         self.dtype = torch.bfloat16 if self.training_args.bf16 else torch.float16
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print("Loading encoder")
         self.encoder = get_model(
             self.model_name, self.device, self.dtype, self.model_args.pretrained_encoder
         )
@@ -111,14 +123,18 @@ class AutoencoderLP(torch.nn.Module):
         # self.embedder = get_embedder(self.encoder)
         self.embed_summary = nn.Embedding(self.num_summary + 1, self.dim, device=self.device, dtype=self.dtype) # + [AE] token
         self.trainable_modules.append(self.embed_summary)
+        print("Loading decoder")
         self.decoder = self.get_decoder(
             self.model_args.share_enc_dec,
             self.model_args.init_same_weights,
             self.model_args.pretrained_decoder,
         )
         self.expand_vocab(self.decoder, vocab_size)
-        self.linear = nn.Linear(self.dim, self.dim, device=self.device, dtype=self.dtype)
-        self.trainable_modules.append(self.linear)
+        if self.model_args.use_linear_layer:
+            self.linear = nn.Linear(self.dim, self.dim, device=self.device, dtype=self.dtype)
+            self.trainable_modules.append(self.linear)
+        else:
+            self.linear = nn.Identity()
 
         if not self.model_args.freeze_decoder:
             if self.model_args.lora_decoder:
