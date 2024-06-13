@@ -29,15 +29,22 @@ def print_trainable_parameters(model, print_all_trainable: bool = False) -> None
             if param.requires_grad:
                 print(name, param.shape)
 
-def print_num_parameters(model, model_name: str="") -> None:
+
+def print_num_parameters(model, model_name: str = "") -> None:
     total_params = sum(p.numel() for p in model.parameters())
     add_model_name = ""
     if len(model_name) > 0:
         add_model_name = f" in {model_name}"
     print(f"Number of parameters{add_model_name}: {total_params / 1e6:.0f}M")
 
+
 def get_model(
-    model_name: str, device: torch.device | str, dtype: torch.dtype, is_pretrained: bool, alter_model: bool = False, model_pars: Dict = None
+    model_name: str,
+    device: torch.device | str,
+    dtype: torch.dtype,
+    is_pretrained: bool,
+    alter_model: bool = False,
+    model_pars: Dict = None,
 ) -> AutoModelForCausalLM:
     if is_pretrained:
         model = AutoModelForCausalLM.from_pretrained(
@@ -47,7 +54,7 @@ def get_model(
         config_model = AutoConfig.from_pretrained(model_name)
         if alter_model:
             config_model.hidden_size = model_pars["hidden_size"]
-            config_model.intermediate_size = 4*model_pars["hidden_size"]
+            config_model.intermediate_size = 4 * model_pars["hidden_size"]
             config_model.num_hidden_layers = model_pars["num_layers"]
         model = AutoModelForCausalLM.from_config(
             config_model, torch_dtype=dtype, attn_implementation="flash_attention_2"
@@ -67,8 +74,8 @@ def get_embedder(model: AutoModelForCausalLM) -> nn.Embedding:
 
     return embedder
 
-def apply_lora(model, model_args):
 
+def apply_lora(model, model_args):
     lora_config = LoraConfig(
         r=model_args.lora_r,
         lora_alpha=model_args.lora_alpha,
@@ -81,7 +88,6 @@ def apply_lora(model, model_args):
     model.print_trainable_parameters()
 
     return model
-
 
 
 class AutoencoderLP(torch.nn.Module):
@@ -111,8 +117,17 @@ class AutoencoderLP(torch.nn.Module):
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print("Loading encoder")
+        self.model_pars = {
+            "hidden_size": self.model_args.hidden_size,
+            "num_layers": self.model_args.num_layers,
+        }
         self.encoder = get_model(
-            self.model_name, self.device, self.dtype, self.model_args.pretrained_encoder
+            self.model_name,
+            self.device,
+            self.dtype,
+            self.model_args.pretrained_encoder,
+            self.model_args.alter_model,
+            self.model_pars,
         )
         self.dim = self.encoder.config.hidden_size
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
@@ -121,7 +136,9 @@ class AutoencoderLP(torch.nn.Module):
         if self.model_args.lora_encoder:
             self.encoder = apply_lora(self.encoder, self.model_args)
         # self.embedder = get_embedder(self.encoder)
-        self.embed_summary = nn.Embedding(self.num_summary + 1, self.dim, device=self.device, dtype=self.dtype) # + [AE] token
+        self.embed_summary = nn.Embedding(
+            self.num_summary + 1, self.dim, device=self.device, dtype=self.dtype
+        )  # + [AE] token
         self.trainable_modules.append(self.embed_summary)
         print("Loading decoder")
         self.decoder = self.get_decoder(
@@ -131,7 +148,9 @@ class AutoencoderLP(torch.nn.Module):
         )
         self.expand_vocab(self.decoder, vocab_size)
         if self.model_args.use_linear_layer:
-            self.linear = nn.Linear(self.dim, self.dim, device=self.device, dtype=self.dtype)
+            self.linear = nn.Linear(
+                self.dim, self.dim, device=self.device, dtype=self.dtype
+            )
             self.trainable_modules.append(self.linear)
         else:
             self.linear = nn.Identity()
@@ -194,7 +213,12 @@ class AutoencoderLP(torch.nn.Module):
             return self.encoder
         elif not init_same_weights:
             return get_model(
-                self.model_name, self.device, self.dtype, pretrained_decoder
+                self.model_name,
+                self.device,
+                self.dtype,
+                pretrained_decoder,
+                self.model_args.alter_model,
+                self.model_pars,
             )
         else:
             return copy.deepcopy(self.encoder)
@@ -234,7 +258,9 @@ class AutoencoderLP(torch.nn.Module):
         # 1. Embed summary and input tokens. Concat them.
         summ_input_embeds = self.embed_summary(summ_tokens)
         if self.model_args.lora_encoder:
-            segment_input_embeds = self.encoder.get_base_model().model.embed_tokens(input_ids)
+            segment_input_embeds = self.encoder.get_base_model().model.embed_tokens(
+                input_ids
+            )
         else:
             segment_input_embeds = self.encoder.model.embed_tokens(input_ids)
         input_embeds = torch.cat([segment_input_embeds, summ_input_embeds], dim=1)

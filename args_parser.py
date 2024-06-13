@@ -34,16 +34,27 @@ class ModelArguments:
     )
     use_linear_layer: bool = field(
         default=True,
-        metadata={"help": "Apply linear layer to memory embeds between ancoder and decoder"},
+        metadata={
+            "help": "Apply linear layer to memory embeds between ancoder and decoder"
+        },
     )
-    lora_encoder: bool = field(default=False, metadata={"help": "Whether to use LORA on encoder"})
-    lora_decoder: bool = field(default=False, metadata={"help": "Whether to use LORA on decoder"})
+    lora_encoder: bool = field(
+        default=False, metadata={"help": "Whether to use LORA on encoder"}
+    )
+    lora_decoder: bool = field(
+        default=False, metadata={"help": "Whether to use LORA on decoder"}
+    )
     lora_r: int = field(default=128, metadata={"help": "lora rank"})
     lora_alpha: int = field(default=32, metadata={"help": "lora alpha"})
     lora_bias: str = field(default="none", metadata={"help": "lora bias"})
     lora_dropout: float = field(default=0.05, metadata={"help": "lora dropout"})
     lora_target_modules: List[str] = field(default=list)
-    alter_model: bool = field(default=False, metadata={"help": "Change model hyperparameters. Works only model is not pretrained"})
+    alter_model: bool = field(
+        default=False,
+        metadata={
+            "help": "Change model hyperparameters. Works only model is not pretrained"
+        },
+    )
     hidden_size: int = field(default=None)
     num_layers: int = field(default=None)
 

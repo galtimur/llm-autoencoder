@@ -22,12 +22,15 @@ def calc_grad_norm(module_list: List) -> float:
 
 class Trainer:
     def __init__(self, model, train_dl: DataLoader, val_dl: DataLoader, args: Dict):
-        train_args = args["train"]
-        batch_size_global = train_args.batch_size_global
-        self.accumulation_steps = batch_size_global // train_args.batch_size_mini
-        self.num_epochs = train_args.num_train_epochs
-        self.eval_steps = train_args.eval_steps
-        self.max_eval_steps = train_args.max_eval_steps
+        self.args = args
+        self.train_args = args["train"]
+        self.batch_size_global = self.train_args.batch_size_global
+        self.accumulation_steps = (
+            self.batch_size_global // self.train_args.batch_size_mini
+        )
+        self.num_epochs = self.train_args.num_train_epochs
+        self.eval_steps = self.train_args.eval_steps
+        self.max_eval_steps = self.train_args.max_eval_steps
 
         self.model = model
         # trainable_modules are modules to be trained.
@@ -35,21 +38,29 @@ class Trainer:
         trainable_parameters = []
         for module in self.model.trainable_modules:
             trainable_parameters.extend(module.parameters())
-        self.optimizer = AdamW(trainable_parameters, lr=train_args.learning_rate)
+        self.optimizer = AdamW(trainable_parameters, lr=self.train_args.learning_rate)
         self.set_train()
 
         self.progress_train = tqdm(train_dl, total=len(train_dl))
         self.val_dl = val_dl
 
         # Initialize wandb
-        model_name = args["model"].model_name_or_path.split("/")[-1]
+        self.wandb_init()
+
+    def wandb_init(self):
+        model_name = self.args["model"].model_name_or_path.split("/")[-1]
         wandb_run_name = f"{model_name}"
-        wandb_run_name += f"_cr_{train_args.compression_rate}"
-        wandb_run_name += f"_seg_{train_args.segment_length}"
-        wandb_run_name += f"_batch_{batch_size_global}"
+        wandb_run_name += f"_cr_{self.train_args.compression_rate}"
+        wandb_run_name += f"_seg_{self.train_args.segment_length}"
+        wandb_run_name += f"_batch_{self.batch_size_global}"
         wandb.init(
-            project=train_args.wandb_project_name, config=args, name=wandb_run_name
+            project=self.train_args.wandb_project_name,
+            config=self.args,
+            name=wandb_run_name,
         )
+        wandb.define_metric("Tokens")
+        wandb.define_metric("loss vs tokens", step_metric="Tokens")
+        wandb.define_metric("val/loss vs tokens", step_metric="Tokens")
         wandb.run.log_code(".")
 
     @staticmethod
@@ -68,8 +79,9 @@ class Trainer:
         self.change_model_mode(self.model.trainable_modules, "eval")
 
     def train(self) -> None:
-        train_loss = 0
+        tokens_consumed = 0
         for epoch in range(self.num_epochs):
+            train_loss = 0
             print(f"Epoch {epoch+1}/{self.num_epochs}")
             step = 1
 
@@ -77,7 +89,7 @@ class Trainer:
                 # datoloader can return None sometimes, since it accumulates buffer of segments
                 if item is None:
                     continue
-
+                tokens_consumed += item.numel()
                 outputs = self.model(item)
                 loss = outputs["loss"]
                 loss /= self.accumulation_steps
@@ -89,7 +101,12 @@ class Trainer:
                     self.optimizer.step()
                     grad_norm = calc_grad_norm(self.model.trainable_modules)
                     self.progress_train.set_postfix({"loss": train_loss}, refresh=True)
-                    log_dict = {"loss": train_loss, "grad_norm": grad_norm}
+                    log_dict = {
+                        "loss": train_loss,
+                        "loss vs tokens": train_loss,
+                        "grad_norm": grad_norm,
+                        "Tokens": tokens_consumed,
+                    }
                     wandb.log(log_dict)
 
                     self.optimizer.zero_grad()
@@ -98,7 +115,11 @@ class Trainer:
                 # validation
                 if step % self.eval_steps == 0:
                     loss = self.validate()
-                    log_dict = {"val/loss": loss}
+                    log_dict = {
+                        "val/loss": loss,
+                        "val/loss vs tokens": loss,
+                        "Tokens": tokens_consumed,
+                    }
                     wandb.log(log_dict)
 
                 step += 1

@@ -8,7 +8,7 @@ ModelArguments:
   init_same_weights: false
   use_linear_layer: true
   alter_model: true
-  hidden_size: 786
+  hidden_size: 768
   num_layers: 16
   lora_encoder: false
   lora_decoder: false
@@ -33,9 +33,9 @@ TrainingArguments:
   cache_dir: null
   output_dir: /mnt/data2/galimzyanov/llm-autoencoder/output
   optim: "adamw_torch"
-  batch_size_mini: 10
-  batch_size_global: 100
-  batch_size_outer: 1
+  batch_size_mini: 50
+  batch_size_global: 500
+  batch_size_outer: 5
   num_train_epochs: 1
   segment_length: 128
   compression_rate: 4
