@@ -1,6 +1,6 @@
 import shutil
 from typing import Dict, List
-import os.path
+import os
 from pathlib import Path
 
 import torch
@@ -47,6 +47,7 @@ class Trainer:
         self.max_eval_steps = self.train_args.max_eval_steps
         self.save_steps = self.train_args.save_steps
         self.output_dir = self.train_args.output_dir
+        os.makedirs(self.output_dir, exist_ok=True)
 
         self.model = model
         # trainable_modules are modules to be trained.
