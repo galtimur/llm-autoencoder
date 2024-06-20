@@ -1,6 +1,6 @@
 import os
 from dataclasses import dataclass, field
-from typing import Dict, Optional, List
+from typing import Dict, List, Optional, Tuple
 
 import transformers
 import yaml
@@ -12,6 +12,10 @@ os.environ["NCCL_IB_DISABLE"] = "1"
 @dataclass
 class ModelArguments:
     model_name_or_path: str = field(default=None)
+    task_type: str = field(
+        default="autoencoder",
+        metadata={"help": "options: 'autoencoder', 'autocompressor'"},
+    )
     flash_attn: bool = field(default=True)
     pretrained_encoder: bool = field(
         default=True, metadata={"help": "Start from pretrained encoder"}
@@ -151,7 +155,11 @@ class TrainingArguments(transformers.TrainingArguments):
     wandb_project_name: str = field(default="autoencoder")
 
 
-def process_args(model_args, data_args, training_args):
+def process_args(model_args, data_args, training_args) -> Tuple:
+    if model_args.task_type not in ["autoencoder", "autocompressor"]:
+        raise ValueError(
+            f"Wrong model type {model_args.model_type}. Allowed options: ['autoencoder', 'autocompressor']"
+        )
     training_args.learning_rate = float(training_args.learning_rate)
     if model_args.freeze_decoder and model_args.freeze_encoder:
         print("!!!! NOTE that you freezed both encoder and decoder")

@@ -9,21 +9,27 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def split_texts(
-    tokenized_texts: List[List[int]], seq_length: int
-) -> List[torch.Tensor]:
+    tokenized_batch: List[List[int]], seg_length: int
+) -> List[List[int]]:
     text_segments = []
     text_ids_merged = []
 
-    for text_ids in tokenized_texts:
+    '''
+    Splitting each text into segment of length seg_length.
+    Then each segment would be splitted into two and used for either autoencoder or autocompressor
+    Returns list of segments.
+    '''
+
+    for text_ids in tokenized_batch:
         text_ids_merged.extend(text_ids)
-        if len(text_ids_merged) < seq_length:
+        if len(text_ids_merged) < seg_length:
             continue
 
         segments = [
-            text_ids_merged[i : i + seq_length]
-            for i in range(0, len(text_ids_merged), seq_length)
+            text_ids_merged[i : i + seg_length]
+            for i in range(0, len(text_ids_merged), seg_length)
         ]
-        if len(segments[-1]) < seq_length:
+        if len(segments[-1]) < seg_length:
             segments = segments[:-1]
         text_segments.extend(segments)
 
@@ -35,16 +41,18 @@ def split_texts(
 class AuCoBatcher:
     def __init__(
         self,
-        seq_length: int,
+        seg_length: int,
         batch_size: int,
         tokenizer: AutoTokenizer,
         text_key: str = "text",
+        task_type: str = "autoencoder",
     ):
         self.batch_size = batch_size
         self.buffer = []
         self.tokenizer = tokenizer
-        self.seq_length = seq_length
+        self.seg_length = seg_length
         self.text_key = text_key
+        self.task_type = task_type
 
     def __call__(self, batch: List[Dict]) -> torch.Tensor:
         # Just to make memory-safe
@@ -55,11 +63,20 @@ class AuCoBatcher:
             self.buffer = []
 
         batch = [item[self.text_key] for item in batch]
-        tokenized_texts = self.tokenizer(batch, truncation=False, padding=False)[
+        tokenized_batch = self.tokenizer(batch, truncation=False, padding=False)[
             "input_ids"
         ]
 
-        segments = split_texts(tokenized_texts, self.seq_length)
+        # Splitting each text into segments.
+        if self.task_type == "autoencoder":
+            segments = split_texts(tokenized_batch, self.seg_length)
+        elif self.task_type == "autocompressor":
+            # Each segment would be splitted into two for autocompressor
+            segments = split_texts(tokenized_batch, 2*self.seg_length)
+            segments = [[segment[:self.seg_length], segment[self.seg_length:]] for segment in segments]
+        else:
+            raise NotImplementedError(f"Task type {self.task_type} is not implemented")
+
         self.buffer.extend(segments)
         if len(self.buffer) < self.batch_size:
             return None
@@ -87,12 +104,8 @@ def get_dataloader(split: str, args: Dict, tokenizer: AutoTokenizer) -> DataLoad
     batch_size_mini = training_args.batch_size_mini
     batch_size_outer = training_args.batch_size_outer
 
-    custom_batcher = AuCoBatcher(
-        seq_length=seg_len,
-        batch_size=batch_size_mini,
-        tokenizer=tokenizer,
-        text_key=data_args.text_key,
-    )
+    custom_batcher = AuCoBatcher(seg_length=seg_len, batch_size=batch_size_mini, tokenizer=tokenizer,
+                                 text_key=data_args.text_key, task_type=args["model"].task_type)
 
     dataset = load_dataset(dataset_name, name=data_subname, data_dir=data_subdir)[
         "train"

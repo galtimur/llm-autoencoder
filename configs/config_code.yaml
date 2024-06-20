@@ -1,5 +1,6 @@
 ModelArguments:
   model_name_or_path: "deepseek-ai/deepseek-coder-1.3b-base"
+  task_type: "autocompressor" # options: "autoencoder", "autocompressor"
   pretrained_encoder: true
   pretrained_decoder: true
   freeze_encoder: false
@@ -38,7 +39,7 @@ TrainingArguments:
   batch_size_outer: 1
   num_train_epochs: 1
   segment_length: 128
-  compression_rate: 10
+  compression_rate: 4
   restore_from: ""
   bf16: true
   wandb_project_name: "autoencoder"
