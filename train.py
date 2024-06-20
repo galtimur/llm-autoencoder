@@ -1,7 +1,7 @@
-import shutil
-from typing import Dict, List
 import os
+import shutil
 from pathlib import Path
+from typing import Dict, List
 
 import torch
 from torch.utils.data import DataLoader
@@ -9,6 +9,8 @@ from tqdm import tqdm
 from transformers import AdamW
 
 import wandb
+from args_parser import parse_config
+from autoencoder import AutoencoderLP
 
 
 def calc_grad_norm(module_list: List) -> float:
@@ -23,19 +25,43 @@ def calc_grad_norm(module_list: List) -> float:
     return total_norm
 
 
-def save_model(model, checkpoint_path: str | Path, current_state: dict):
-    tokens = current_state["tokens"]
-    loss = current_state["loss"]
-    checkpoint_path = os.path.join(checkpoint_path, "checkpoint.pt")
+def save_model(model, checkpoint_folder: str | Path, current_state: dict):
+    checkpoint_folder = Path(checkpoint_folder)
+    checkpoint_path = checkpoint_folder / "checkpoint.pt"
+    config_path = checkpoint_folder / "config.json"
     torch.save(
         {
-            "tokens": tokens,
+            "tokens": current_state["tokens"],
             "model_state_dict": model.state_dict(),
             # 'optimizer_state_dict': optimizer.state_dict(),
-            "loss": loss,
+            "loss": current_state["loss"],
         },
         checkpoint_path,
     )
+    model.config.save_pretrained(config_path)
+
+
+def load_model(checkpoint_folder: str | Path) -> Dict:
+    print("------- Loading the model from the checkpoint -------")
+
+    checkpoint_folder = Path(checkpoint_folder)
+    config_path = checkpoint_folder / "config.yaml"
+    checkpoint_path = checkpoint_folder / "checkpoint.pt"
+
+    args = parse_config(config_path)
+    autoencoder = AutoencoderLP(args)
+
+    checkpoint = torch.load(checkpoint_path)
+    autoencoder.load_state_dict(checkpoint["model_state_dict"])
+
+    if "tokens" in checkpoint:
+        tokens = checkpoint["tokens"]
+        print(f"Number of tokens trained: {tokens}")
+    if "tokens" in checkpoint:
+        loss = checkpoint["loss"]
+        print(f"Last loss: {loss}")
+
+    return {"model": autoencoder, "args": args}
 
 
 def change_model_mode(module_list: List, mode: str) -> None:
@@ -47,9 +73,8 @@ def change_model_mode(module_list: List, mode: str) -> None:
         [module.train() for module in module_list]
 
 
-def evaluate_ce(model, dataloader, max_eval_steps: int, module_list: List):
+def evaluate_ce(model, dataloader: DataLoader, max_eval_steps: int) -> float:
     print("------ Validating ------")
-    change_model_mode(module_list, "eval")
     total_loss = 0
     step = 0
 
@@ -69,12 +94,18 @@ def evaluate_ce(model, dataloader, max_eval_steps: int, module_list: List):
             break
 
     val_loss = total_loss / step
-    change_model_mode(module_list, "train")
     return val_loss
 
 
 class Trainer:
-    def __init__(self, model, train_dl: DataLoader, val_dl: DataLoader, args: Dict, config_path: str | Path):
+    def __init__(
+        self,
+        model,
+        train_dl: DataLoader,
+        val_dl: DataLoader,
+        args: Dict,
+        config_path: str | Path,
+    ):
         self.args = args
         self.train_args = args["train"]
         self.batch_size_global = self.train_args.batch_size_global
@@ -186,9 +217,11 @@ class Trainer:
                 step += 1
 
     def validate_ce(self):
-        return evaluate_ce(
-            self.model, self.val_dl, self.max_eval_steps, self.model.trainable_modules
-        )
+        self.set_eval()
+        val_loss = evaluate_ce(self.model, self.val_dl, self.max_eval_steps)
+        self.set_train()
+
+        return val_loss
 
     def validate_em(self):
         pass
