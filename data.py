@@ -8,17 +8,15 @@ from transformers import AutoTokenizer
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def split_texts(
-    tokenized_batch: List[List[int]], seg_length: int
-) -> List[List[int]]:
+def split_texts(tokenized_batch: List[List[int]], seg_length: int) -> List[List[int]]:
     text_segments = []
     text_ids_merged = []
 
-    '''
+    """
     Splitting each text into segment of length seg_length.
     Then each segment would be splitted into two and used for either autoencoder or autocompressor
     Returns list of segments.
-    '''
+    """
 
     for text_ids in tokenized_batch:
         text_ids_merged.extend(text_ids)
@@ -72,8 +70,11 @@ class AuCoBatcher:
             segments = split_texts(tokenized_batch, self.seg_length)
         elif self.task_type == "autocompressor":
             # Each segment would be splitted into two for autocompressor
-            segments = split_texts(tokenized_batch, 2*self.seg_length)
-            segments = [[segment[:self.seg_length], segment[self.seg_length:]] for segment in segments]
+            segments = split_texts(tokenized_batch, 2 * self.seg_length)
+            segments = [
+                [segment[: self.seg_length], segment[self.seg_length :]]
+                for segment in segments
+            ]
         else:
             raise NotImplementedError(f"Task type {self.task_type} is not implemented")
 
@@ -104,8 +105,13 @@ def get_dataloader(split: str, args: Dict, tokenizer: AutoTokenizer) -> DataLoad
     batch_size_mini = training_args.batch_size_mini
     batch_size_outer = training_args.batch_size_outer
 
-    custom_batcher = AuCoBatcher(seg_length=seg_len, batch_size=batch_size_mini, tokenizer=tokenizer,
-                                 text_key=data_args.text_key, task_type=args["model"].task_type)
+    custom_batcher = AuCoBatcher(
+        seg_length=seg_len,
+        batch_size=batch_size_mini,
+        tokenizer=tokenizer,
+        text_key=data_args.text_key,
+        task_type=args["model"].task_type,
+    )
 
     dataset = load_dataset(dataset_name, name=data_subname, data_dir=data_subdir)[
         "train"

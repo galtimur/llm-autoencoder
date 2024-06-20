@@ -136,7 +136,6 @@ class AutoencoderLP(torch.nn.Module):
         self.expand_vocab(self.encoder, vocab_size)
         if self.model_args.lora_encoder:
             self.encoder = apply_lora(self.encoder, self.model_args)
-        # self.embedder = get_embedder(self.encoder)
         self.embed_summary = nn.Embedding(
             self.num_summary + 1, self.dim, device=self.device, dtype=self.dtype
         )  # + [AE] token
@@ -167,23 +166,6 @@ class AutoencoderLP(torch.nn.Module):
 
         self.initialize()
         pass
-
-    # def add_tokens_old(self, vocab_size: int) -> int:
-    #     self.pad_id = vocab_size
-    #     self.ae_id = vocab_size + 1
-    #     vocab_size_new = vocab_size + self.num_summary + 2  # + [PAD] token + [AE] token
-    #
-    #     self.bos_id = self.tokenizer.bos_token_id
-    #     self.eos_id = self.tokenizer.eos_token_id
-    #     self.summ_tokens = torch.arange(
-    #         vocab_size - self.num_summary,
-    #         vocab_size,
-    #         dtype=torch.long,
-    #         device=self.device,
-    #     ).unsqueeze(0)
-    #     self.ae_tok = torch.tensor([[self.ae_id]], device=self.device)
-    #
-    #     return vocab_size_new
 
     def add_tokens(self, vocab_size: int) -> int:
         vocab_size_new = vocab_size
@@ -250,15 +232,8 @@ class AutoencoderLP(torch.nn.Module):
     def forward(self, input_ids: torch.LongTensor = None) -> Dict:
         batch_size = input_ids.size(0)
 
-        # ae_embed = self.embedder(self.ae_tok).repeat(batch_size, 1, 1)
         ae_embed = self.embed_summary(self.ae_tok).repeat(batch_size, 1, 1)
-        # mask_embed = self.embed_summary(self.mask_tok)
         summ_tokens = self.summ_tokens.repeat(batch_size, 1)
-
-        # # 1. Append summary tokens to each segment. Embed them.
-        # segment_input_ids = torch.cat([input_ids, summ_tokens], dim=1)
-        # input_embeds = self.embedder(segment_input_ids)
-        # segment_input_embeds = input_embeds[:, : self.segment_length]
 
         # 1. Embed summary and input tokens. Concat them.
         summ_input_embeds = self.embed_summary(summ_tokens)
@@ -276,9 +251,6 @@ class AutoencoderLP(torch.nn.Module):
         summary_embeds = self.linear(summary_embeds)
 
         # 3. Decoder input consists of summary_embeddings, autoencoder token embed and original sequence.
-        # mask = torch.rand_like(segment_input_embeds[:,:,:1]) > 0.5
-        # mask = mask.to(segment_input_embeds.dtype).to(segment_input_embeds.device)
-        # segment_input_embeds = mask*segment_input_embeds
         dec_input_embeds = torch.cat(
             [summary_embeds, ae_embed, segment_input_embeds], dim=1
         )

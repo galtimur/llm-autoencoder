@@ -4,11 +4,11 @@ from pathlib import Path
 from typing import Dict, List
 
 import torch
+import wandb
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AdamW
 
-import wandb
 from args_parser import parse_config
 from autoencoder import AutoencoderLP
 
