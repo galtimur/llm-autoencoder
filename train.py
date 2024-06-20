@@ -22,26 +22,67 @@ def calc_grad_norm(module_list: List) -> float:
 
     return total_norm
 
+
 def save_model(model, checkpoint_path: str | Path, current_state: dict):
     tokens = current_state["tokens"]
     loss = current_state["loss"]
     checkpoint_path = os.path.join(checkpoint_path, "checkpoint.pt")
-    torch.save({
-        'tokens': tokens,
-        'model_state_dict': model.state_dict(),
-        # 'optimizer_state_dict': optimizer.state_dict(),
-        'loss': loss,
-    }, checkpoint_path)
+    torch.save(
+        {
+            "tokens": tokens,
+            "model_state_dict": model.state_dict(),
+            # 'optimizer_state_dict': optimizer.state_dict(),
+            "loss": loss,
+        },
+        checkpoint_path,
+    )
+
+
+def change_model_mode(module_list: List, mode: str) -> None:
+    if mode not in ["eval", "train"]:
+        ValueError('mode should be "eval" or "train"')
+    if mode == "eval":
+        [module.eval() for module in module_list]
+    if mode == "train":
+        [module.train() for module in module_list]
+
+
+def evaluate_ce(model, dataloader, max_eval_steps: int, module_list: List):
+    print("------ Validating ------")
+    change_model_mode(module_list, "eval")
+    total_loss = 0
+    step = 0
+
+    progress = tqdm(total=max_eval_steps, leave=True)
+    for item in dataloader:
+        # dataloader can return None sometimes, since it accumulates buffer of segments
+        if item is None:
+            continue
+        with torch.no_grad():
+            outputs = model(item)
+        loss = outputs["loss"].item()
+        total_loss += loss
+        progress.update()
+        progress.refresh()
+        step += 1
+        if step >= max_eval_steps:
+            break
+
+    val_loss = total_loss / step
+    change_model_mode(module_list, "train")
+    return val_loss
 
 
 class Trainer:
-    def __init__(self, model, train_dl: DataLoader, val_dl: DataLoader, args: Dict):
+    def __init__(self, model, train_dl: DataLoader, val_dl: DataLoader, args: Dict, config_path: str | Path):
         self.args = args
         self.train_args = args["train"]
         self.batch_size_global = self.train_args.batch_size_global
         self.accumulation_steps = (
             self.batch_size_global // self.train_args.batch_size_mini
         )
+        self.val_ce = self.args["data"].validate_ce
+        self.val_em = self.args["data"].validate_em
         self.num_epochs = self.train_args.num_train_epochs
         self.eval_steps = self.train_args.eval_steps
         self.max_eval_steps = self.train_args.max_eval_steps
@@ -63,7 +104,7 @@ class Trainer:
 
         # Initialize wandb
         self.wandb_init()
-        shutil.copy("configs/config.yaml", os.path.join(self.output_dir, "config.yaml"))
+        shutil.copy(config_path, os.path.join(self.output_dir, "config.yaml"))
 
     def wandb_init(self):
         model_name = self.args["model"].model_name_or_path.split("/")[-1]
@@ -81,20 +122,11 @@ class Trainer:
         wandb.define_metric("val/loss vs tokens", step_metric="Tokens")
         wandb.run.log_code(".")
 
-    @staticmethod
-    def change_model_mode(module_list: List, mode: str) -> None:
-        if mode not in ["eval", "train"]:
-            ValueError('mode should be "eval" or "train"')
-        if mode == "eval":
-            [module.eval() for module in module_list]
-        if mode == "train":
-            [module.train() for module in module_list]
-
     def set_train(self) -> None:
-        self.change_model_mode(self.model.trainable_modules, "train")
+        change_model_mode(self.model.trainable_modules, "train")
 
     def set_eval(self) -> None:
-        self.change_model_mode(self.model.trainable_modules, "eval")
+        change_model_mode(self.model.trainable_modules, "eval")
 
     def train(self) -> None:
         tokens_consumed = 0
@@ -132,12 +164,15 @@ class Trainer:
 
                 # validation
                 if step % self.eval_steps == 0:
-                    loss = self.validate()
-                    log_dict = {
-                        "val/loss": loss,
-                        "val/loss vs tokens": loss,
-                        "Tokens": tokens_consumed,
-                    }
+                    log_dict = {"Tokens": tokens_consumed}
+                    if self.val_ce:
+                        loss = self.validate_ce()
+                        log_dict.update({"val/loss": loss, "val/loss vs tokens": loss})
+                    if self.val_em:
+                        em = self.validate_em()
+                        log_dict.update(
+                            {"val/exact match": em, "val/exact match vs tokens": em}
+                        )
                     wandb.log(log_dict)
 
                 if step % self.save_steps == 0:
@@ -150,27 +185,10 @@ class Trainer:
                     save_model(self.model, self.output_dir, current_state)
                 step += 1
 
-    def validate(self):
-        print("------ Validating ------")
-        self.set_eval()
-        total_loss = 0
-        step = 0
+    def validate_ce(self):
+        return evaluate_ce(
+            self.model, self.val_dl, self.max_eval_steps, self.model.trainable_modules
+        )
 
-        progress = tqdm(total=self.max_eval_steps, leave=True)
-        for item in self.val_dl:
-            # dataloader can return None sometimes, since it accumulates buffer of segments
-            if item is None:
-                continue
-            with torch.no_grad():
-                outputs = self.model(item)
-            loss = outputs["loss"].item()
-            total_loss += loss
-            progress.update()
-            progress.refresh()
-            step += 1
-            if step >= self.max_eval_steps:
-                break
-
-        val_loss = total_loss / step
-        self.set_train()
-        return val_loss
+    def validate_em(self):
+        pass

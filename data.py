@@ -76,10 +76,12 @@ def get_dataloader(split: str, args: Dict, tokenizer: AutoTokenizer) -> DataLoad
     # TODO make it better. Possibly move to a class
     if split == "train":
         dataset_name = data_args.train_dataset_name
-        data_subset = data_args.train_dataset_subset
+        data_subname = data_args.train_dataset_subname
+        data_subdir = data_args.train_dataset_subdir
     elif split == "val":
         dataset_name = data_args.val_dataset_name
-        data_subset = data_args.val_dataset_subset
+        data_subname = data_args.val_dataset_subname
+        data_subdir = data_args.val_dataset_subdir
 
     seg_len = training_args.segment_length
     batch_size_mini = training_args.batch_size_mini
@@ -92,7 +94,9 @@ def get_dataloader(split: str, args: Dict, tokenizer: AutoTokenizer) -> DataLoad
         text_key=data_args.text_key,
     )
 
-    dataset = load_dataset(dataset_name, name=data_subset)["train"]
+    dataset = load_dataset(dataset_name, name=data_subname, data_dir=data_subdir)[
+        "train"
+    ]
     dataset = dataset.shuffle(data_args.rnd_seed)
 
     dataloader = DataLoader(
@@ -106,6 +110,10 @@ def get_data(args: Dict) -> Tuple[DataLoader, DataLoader]:
     model_args = args["model"]
     tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path)
     train_dl = get_dataloader("train", args, tokenizer)
-    val_dl = get_dataloader("val", args, tokenizer)
+
+    if args["data"].validate_ce:
+        val_dl = get_dataloader("val", args, tokenizer)
+    else:
+        val_dl = None
 
     return train_dl, val_dl

@@ -1,0 +1,48 @@
+ModelArguments:
+  model_name_or_path: "deepseek-ai/deepseek-coder-1.3b-base"
+  pretrained_encoder: true
+  pretrained_decoder: true
+  freeze_encoder: false
+  freeze_decoder: true
+  share_enc_dec: false
+  init_same_weights: true
+  use_linear_layer: true
+  lora_encoder: true
+  lora_decoder: false
+  lora_r: 16
+  lora_alpha: 16
+  lora_dropout: 0.05
+  lora_target_modules: ["q_proj", "v_proj", "o_proj", "k_proj"]
+  lora_bias: "none"
+#  train: true
+
+DataArguments:
+  data_path: null
+  debug_data: false
+  train_dataset_name: "bigcode/the-stack-dedup"# "openwebtext", "bigcode/the-stack-dedup"
+  train_dataset_subname: null # null,
+  train_dataset_subdir: "data/python"
+  validate_ce: false
+  validate_em: false
+  # val_dataset_name: "wikitext"
+  # val_dataset_subname: "wikitext-103-raw-v1"
+  text_key: "content"
+  rnd_seed: 42
+
+TrainingArguments:
+  cache_dir: null
+  output_dir: /mnt/data2/galimzyanov/llm-autoencoder/output/deep-seek-train-enc-10x
+  optim: "adamw_torch"
+  batch_size_mini: 10
+  batch_size_global: 100
+  batch_size_outer: 1
+  num_train_epochs: 1
+  segment_length: 128
+  compression_rate: 10
+  restore_from: ""
+  bf16: true
+  wandb_project_name: "autoencoder"
+  save_steps: 10000
+  eval_steps: 3000
+  max_eval_steps: 1000
+  learning_rate: 1e-3

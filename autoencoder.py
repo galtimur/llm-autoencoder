@@ -103,6 +103,7 @@ class AutoencoderLP(torch.nn.Module):
     def __init__(self, args: Dict):
         super().__init__()
 
+        # TODO track for devices (not to pass from self.device (??)) in case we run multi-gpu.
         self.model_args = args["model"]
         self.training_args = args["train"]
 
@@ -196,7 +197,9 @@ class AutoencoderLP(torch.nn.Module):
             device=self.device,
         ).unsqueeze(0)
         self.ae_id = self.num_summary
+        # self.mask_id = self.num_summary + 1
         self.ae_tok = torch.tensor([[self.ae_id]], device=self.device)
+        # self.mask_tok = torch.tensor([[self.mask_id]], device=self.device)
 
         return vocab_size_new
 
@@ -249,6 +252,7 @@ class AutoencoderLP(torch.nn.Module):
 
         # ae_embed = self.embedder(self.ae_tok).repeat(batch_size, 1, 1)
         ae_embed = self.embed_summary(self.ae_tok).repeat(batch_size, 1, 1)
+        # mask_embed = self.embed_summary(self.mask_tok)
         summ_tokens = self.summ_tokens.repeat(batch_size, 1)
 
         # # 1. Append summary tokens to each segment. Embed them.
@@ -272,6 +276,9 @@ class AutoencoderLP(torch.nn.Module):
         summary_embeds = self.linear(summary_embeds)
 
         # 3. Decoder input consists of summary_embeddings, autoencoder token embed and original sequence.
+        # mask = torch.rand_like(segment_input_embeds[:,:,:1]) > 0.5
+        # mask = mask.to(segment_input_embeds.dtype).to(segment_input_embeds.device)
+        # segment_input_embeds = mask*segment_input_embeds
         dec_input_embeds = torch.cat(
             [summary_embeds, ae_embed, segment_input_embeds], dim=1
         )
@@ -282,5 +289,6 @@ class AutoencoderLP(torch.nn.Module):
         logits = logits[:, -self.segment_length : -1, :].reshape(-1, logits.size(-1))
         target_ids = input_ids[:, 1:].reshape(-1)
         loss = self.loss_fn(logits, target_ids)
+        # loss_mask = torch.randint_like(target_ids, 0, 2).to(logits.dtype)
 
         return {"loss": loss, "logits": logits}

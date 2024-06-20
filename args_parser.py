@@ -71,12 +71,22 @@ class DataArguments:
         },
     )
     train_dataset_name: str = field(default=None)
-    train_dataset_subset: str = field(default=None)
+    train_dataset_subname: str = field(default=None)
+    train_dataset_subdir: str = field(default=None)
     val_dataset_name: str = field(default=None)
-    val_dataset_subset: str = field(default=None)
+    val_dataset_subname: str = field(default=None)
+    val_dataset_subdir: str = field(default=None)
     rnd_seed: int = field(default=42, metadata={"help": "Rnd seed for data shuffling"})
     text_key: str = field(
         default="text", metadata={"help": "The key in dataset for the text item"}
+    )
+    validate_ce: bool = field(
+        default=False,
+        metadata={"help": "Whether to calculate CE loss on validation"},
+    )
+    validate_em: bool = field(
+        default=False,
+        metadata={"help": "Whether to calculate exact match metric loss on validation"},
     )
 
 
