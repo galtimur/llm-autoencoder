@@ -14,7 +14,7 @@ class ModelArguments:
     model_name_or_path: str = field(default=None)
     task_type: str = field(
         default="autoencoder",
-        metadata={"help": "options: 'autoencoder', 'autocompressor'"},
+        metadata={"help": "options: 'autoencoder', 'autocompressor', 'base'"},
     )
     flash_attn: bool = field(default=True)
     pretrained_encoder: bool = field(
@@ -156,20 +156,26 @@ class TrainingArguments(transformers.TrainingArguments):
 
 
 def process_args(model_args, data_args, training_args) -> Tuple:
-    if model_args.task_type not in ["autoencoder", "autocompressor"]:
+    if model_args.task_type not in [
+        "autoencoder",
+        "autocompressor",
+        "base",
+        "base_no_context",
+    ]:
         raise ValueError(
-            f"Wrong model type {model_args.model_type}. Allowed options: ['autoencoder', 'autocompressor']"
+            f"Wrong model type {model_args.model_type}. Allowed options: ['autoencoder', 'autocompressor', 'base', 'base_no_context']"
         )
+
+    if model_args.task_type in ["base", "base_no_context"]:
+        model_args.share_enc_dec = True
+        model_args.use_linear_layer = False
+
     training_args.learning_rate = float(training_args.learning_rate)
     if model_args.freeze_decoder and model_args.freeze_encoder:
         print("!!!! NOTE that you freezed both encoder and decoder")
     if model_args.share_enc_dec:
-        eq_freeze = model_args.freeze_decoder == model_args.freeze_encoder
-        eq_pretrained = model_args.pretrained_decoder == model_args.pretrained_encoder
-        if not (eq_freeze and eq_pretrained):
-            raise ValueError(
-                "If you share decoder and encoder, the freezing and pretraining flags should be equal"
-            )
+        model_args.freeze_decoder = model_args.freeze_encoder
+        model_args.pretrained_decoder = model_args.pretrained_encoder
     if model_args.freeze_decoder and not model_args.pretrained_decoder:
         print("!!!! NOTE you freezed not pretrained decoder")
     if model_args.freeze_encoder and not model_args.pretrained_encoder:

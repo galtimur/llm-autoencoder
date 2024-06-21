@@ -160,7 +160,7 @@ class AutoencoderLP(torch.nn.Module):
     def setup_decoder(self):
         print("Loading decoder")
         if self.model_args.share_enc_dec:
-            decoder = self.encoder
+            return self.encoder
         elif not self.model_args.init_same_weights:
             decoder = get_model(
                 self.model_name,
@@ -245,10 +245,10 @@ class AutoencoderLP(torch.nn.Module):
 
     def get_inputs(self, input_ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         if self.task_type == "autoencoder":
-            prefix, suffix = input_ids, input_ids
-        elif self.task_type == "autocompressor":
-            prefix, suffix = input_ids[:, 0, :], input_ids[:, 1, :]
-        return prefix, suffix
+            prefix_ids, suffix_ids = input_ids, input_ids
+        elif self.task_type in ["autocompressor", "base", "base_no_context"]:
+            prefix_ids, suffix_ids = input_ids[:, 0, :], input_ids[:, 1, :]
+        return prefix_ids, suffix_ids
 
     def get_embeds(self, prefix_ids, suffix_ids, summ_tokens, batch_size):
         summ_input_embeds = self.embed_summary(summ_tokens)
@@ -257,11 +257,27 @@ class AutoencoderLP(torch.nn.Module):
         if self.task_type == "autoencoder":
             suffix_input_embeds = prefix_input_embeds
             sep_embed = self.embed_summary(self.ae_tok).repeat(batch_size, 1, 1)
-        elif self.task_type == "autocompressor":
+        elif self.task_type in ["autocompressor", "base", "base_no_context"]:
             suffix_input_embeds = self.embed_tokens(suffix_ids)
             sep_embed = self.embed_compress(self.summ_tok).repeat(batch_size, 1, 1)
 
         return prefix_input_embeds, suffix_input_embeds, summ_input_embeds, sep_embed
+
+    def get_logits_and_targets(
+        self, logits: torch.Tensor, suffix_ids: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        if self.task_type != "base_no_context":
+            logits = logits[:, -self.segment_length - 1 : -1, :].reshape(
+                -1, logits.size(-1)
+            )
+            target_ids = suffix_ids.reshape(-1)
+        elif self.task_type == "base_no_context":
+            logits = logits[:, -self.segment_length : -1, :].reshape(
+                -1, logits.size(-1)
+            )
+            target_ids = suffix_ids[:, 1:].reshape(-1)
+
+        return logits, target_ids
 
     def forward(self, input_ids: torch.LongTensor) -> Dict:
         batch_size = input_ids.size(0)
@@ -277,26 +293,28 @@ class AutoencoderLP(torch.nn.Module):
             sep_embed,
         ) = self.get_embeds(prefix_ids, suffix_ids, summ_tokens, batch_size)
 
-        input_embeds = torch.cat([prefix_input_embeds, summ_input_embeds], dim=1)
+        if self.task_type in ["autoencoder", "autocompressor"]:
+            # 2. Encode sequence, get summary_embeddings. Apply linear layer
+            input_embeds = torch.cat([prefix_input_embeds, summ_input_embeds], dim=1)
+            output = self.encoder(inputs_embeds=input_embeds, output_hidden_states=True)
+            summary_embeds = output.hidden_states[-1][:, -self.num_summary :]
+            summary_embeds = self.linear(summary_embeds)
 
-        # 2. Encode sequence, get summary_embeddings. Apply linear layer
-        output = self.encoder(inputs_embeds=input_embeds, output_hidden_states=True)
-        summary_embeds = output.hidden_states[-1][:, -self.num_summary :]
-        summary_embeds = self.linear(summary_embeds)
-
-        # 3. Decoder input consists of summary_embeddings, autoencoder token embed and original sequence.
-        dec_input_embeds = torch.cat(
-            [summary_embeds, sep_embed, suffix_input_embeds], dim=1
-        )
+            # 3. Decoder input consists of summary_embeddings, autoencoder token embed and original sequence.
+            dec_input_embeds = torch.cat(
+                [summary_embeds, sep_embed, suffix_input_embeds], dim=1
+            )
+        elif self.task_type == "base":
+            dec_input_embeds = torch.cat(
+                [prefix_input_embeds, suffix_input_embeds], dim=1
+            )
+        elif self.task_type == "base_no_context":
+            dec_input_embeds = suffix_input_embeds
 
         decoder_outputs = self.decoder(inputs_embeds=dec_input_embeds)
-        logits = decoder_outputs.logits
 
         # 4. Calculate loss on the original sequence.
-        logits = logits[:, -self.segment_length - 1 : -1, :].reshape(
-            -1, logits.size(-1)
-        )
-        target_ids = suffix_ids.reshape(-1)
+        logits, target_ids = self.get_logits_and_targets(decoder_outputs.logits, suffix_ids)
         loss = self.loss_fn(logits, target_ids)
         # loss_mask = torch.randint_like(target_ids, 0, 2).to(logits.dtype)
 

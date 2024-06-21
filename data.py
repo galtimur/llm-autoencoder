@@ -68,7 +68,7 @@ class AuCoBatcher:
         # Splitting each text into segments.
         if self.task_type == "autoencoder":
             segments = split_texts(tokenized_batch, self.seg_length)
-        elif self.task_type == "autocompressor":
+        elif self.task_type in ["autocompressor", "base", "base_no_context"]:
             # Each segment would be splitted into two for autocompressor
             segments = split_texts(tokenized_batch, 2 * self.seg_length)
             segments = [

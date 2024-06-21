@@ -106,6 +106,7 @@ class Trainer:
     ):
         self.args = args
         self.train_args = args["train"]
+        self.task_type = args["model"].task_type
         self.batch_size_global = self.train_args.batch_size_global
         self.accumulation_steps = (
             self.batch_size_global // self.train_args.batch_size_mini
@@ -131,10 +132,12 @@ class Trainer:
         self.progress_train = tqdm(train_dl, total=len(train_dl))
         self.val_dl = val_dl
 
-        if args["model"].task_type == "autocompressor":
-            self.loss_prefix = "AuCo/"
-        else:
-            self.loss_prefix = ""
+        prefix_dict = {"autocompressor": "AuCo/",
+                       "base": "AuCo/",
+                       "base_no_context": "AuCo/",
+                       "autoencoder": ""}
+
+        self.loss_prefix = prefix_dict[self.task_type]
 
         # Initialize wandb
         self.wandb_init()
@@ -142,10 +145,17 @@ class Trainer:
 
     def wandb_init(self):
         model_name = self.args["model"].model_name_or_path.split("/")[-1]
-        wandb_run_name = f"{model_name}"
+
+        name_dict = {"autoencoder": "AuEnc",
+                     "autocompressor": "AuCo",
+                     "base": "Base",
+                     "base_no_context": "NoCtxt"}
+
+        wandb_run_name = name_dict[self.task_type]
         wandb_run_name += f"_cr_{self.train_args.compression_rate}"
         wandb_run_name += f"_seg_{self.train_args.segment_length}"
         wandb_run_name += f"_batch_{self.batch_size_global}"
+        wandb_run_name += f"{model_name}"
         wandb.init(
             project=self.train_args.wandb_project_name,
             config=self.args,
