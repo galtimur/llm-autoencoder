@@ -1,5 +1,5 @@
 import copy
-from typing import Dict
+from typing import Dict, Tuple
 
 import torch
 import torch.nn as nn
@@ -243,29 +243,39 @@ class AutoencoderLP(torch.nn.Module):
 
         return input_embeds
 
-    def get_inputs(self, input_ids):
+    def get_inputs(self, input_ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         if self.task_type == "autoencoder":
             prefix, suffix = input_ids, input_ids
         elif self.task_type == "autocompressor":
             prefix, suffix = input_ids[:, 0, :], input_ids[:, 1, :]
         return prefix, suffix
 
-    def forward(self, input_ids: torch.LongTensor) -> Dict:
-        batch_size = input_ids.size(0)
-        prefix, suffix = self.get_inputs(input_ids)
-
-        summ_tokens = self.summ_tokens.repeat(batch_size, 1)
-
-        # 1. Embed summary and input tokens. Concat them.
+    def get_embeds(self, prefix_ids, suffix_ids, summ_tokens, batch_size):
         summ_input_embeds = self.embed_summary(summ_tokens)
-        prefix_input_embeds = self.embed_tokens(prefix)
+        prefix_input_embeds = self.embed_tokens(prefix_ids)
 
         if self.task_type == "autoencoder":
             suffix_input_embeds = prefix_input_embeds
             sep_embed = self.embed_summary(self.ae_tok).repeat(batch_size, 1, 1)
         elif self.task_type == "autocompressor":
-            suffix_input_embeds = self.embed_tokens(prefix)
+            suffix_input_embeds = self.embed_tokens(suffix_ids)
             sep_embed = self.embed_compress(self.summ_tok).repeat(batch_size, 1, 1)
+
+        return prefix_input_embeds, suffix_input_embeds, summ_input_embeds, sep_embed
+
+    def forward(self, input_ids: torch.LongTensor) -> Dict:
+        batch_size = input_ids.size(0)
+        prefix_ids, suffix_ids = self.get_inputs(input_ids)
+
+        summ_tokens = self.summ_tokens.repeat(batch_size, 1)
+
+        # 1. Embed summary and input tokens. Concat them.
+        (
+            prefix_input_embeds,
+            suffix_input_embeds,
+            summ_input_embeds,
+            sep_embed,
+        ) = self.get_embeds(prefix_ids, suffix_ids, summ_tokens, batch_size)
 
         input_embeds = torch.cat([prefix_input_embeds, summ_input_embeds], dim=1)
 
@@ -286,7 +296,7 @@ class AutoencoderLP(torch.nn.Module):
         logits = logits[:, -self.segment_length - 1 : -1, :].reshape(
             -1, logits.size(-1)
         )
-        target_ids = suffix.reshape(-1)
+        target_ids = suffix_ids.reshape(-1)
         loss = self.loss_fn(logits, target_ids)
         # loss_mask = torch.randint_like(target_ids, 0, 2).to(logits.dtype)
 
