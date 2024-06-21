@@ -132,7 +132,6 @@ class AutoencoderLP(torch.nn.Module):
         pass
 
     def add_tokens(self, model_name: str) -> None:
-
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.bos_id = tokenizer.bos_token_id
         self.eos_id = tokenizer.eos_token_id
@@ -145,12 +144,11 @@ class AutoencoderLP(torch.nn.Module):
         # Token after which the autoencoder starts
         self.ae_id = self.num_summary
         # Token after which the continuation starts
-        self.summ_id = 0 # self.num_summary + 1
+        self.summ_id = 0  # self.num_summary + 1
         # self.mask_id = self.num_summary + 2
         self.ae_tok = torch.tensor([[self.ae_id]], device=self.device)
         self.summ_tok = torch.tensor([[self.summ_id]], device=self.device)
         # self.mask_tok = torch.tensor([[self.mask_id]], device=self.device)
-
 
     def expand_vocab(self, model, vocab_size: int):
         if hasattr(self, "pad_id"):
@@ -200,7 +198,6 @@ class AutoencoderLP(torch.nn.Module):
         return encoder
 
     def setup_new_embeddings_and_linear(self):
-
         dim = self.encoder.config.hidden_size
         self.embed_summary = nn.Embedding(
             self.num_summary + 1, dim, device=self.device, dtype=self.dtype
@@ -213,13 +210,10 @@ class AutoencoderLP(torch.nn.Module):
             self.trainable_modules.append(self.embed_compress)
 
         if self.model_args.use_linear_layer:
-            self.linear = nn.Linear(
-                dim, dim, device=self.device, dtype=self.dtype
-            )
+            self.linear = nn.Linear(dim, dim, device=self.device, dtype=self.dtype)
             self.trainable_modules.append(self.linear)
         else:
             self.linear = nn.Identity()
-
 
     def initialize(self) -> None:
         print("Freezing the decoder...")
@@ -289,7 +283,9 @@ class AutoencoderLP(torch.nn.Module):
         logits = decoder_outputs.logits
 
         # 4. Calculate loss on the original sequence.
-        logits = logits[:, -self.segment_length - 1: -1, :].reshape(-1, logits.size(-1))
+        logits = logits[:, -self.segment_length - 1 : -1, :].reshape(
+            -1, logits.size(-1)
+        )
         target_ids = suffix.reshape(-1)
         loss = self.loss_fn(logits, target_ids)
         # loss_mask = torch.randint_like(target_ids, 0, 2).to(logits.dtype)

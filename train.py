@@ -4,11 +4,11 @@ from pathlib import Path
 from typing import Dict, List
 
 import torch
-import wandb
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AdamW
 
+import wandb
 from args_parser import parse_config
 from autoencoder import AutoencoderLP
 
@@ -201,7 +201,9 @@ class Trainer:
                     log_dict = {"Tokens": tokens_consumed}
                     if self.val_ce:
                         val_loss = self.validate_ce()
-                        log_dict.update({"val/loss": val_loss, "val/loss vs tokens": val_loss})
+                        log_dict.update(
+                            {"val/loss": val_loss, "val/loss vs tokens": val_loss}
+                        )
                     if self.val_em:
                         em = self.validate_em()
                         log_dict.update(
