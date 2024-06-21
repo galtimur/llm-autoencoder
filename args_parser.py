@@ -32,6 +32,12 @@ class ModelArguments:
     freeze_decoder: bool = field(
         default=True, metadata={"help": "Do not train decoder"}
     )
+    freeze_linear: bool = field(
+        default=False, metadata={"help": "Do not train linear layer"}
+    )
+    freeze_summary: bool = field(
+        default=False, metadata={"help": "Do not train summary embeddings"}
+    )
     share_enc_dec: bool = field(
         default=False, metadata={"help": "Use same instance for decoder and encoder"}
     )
@@ -183,6 +189,10 @@ def process_args(model_args, data_args, training_args) -> Tuple:
         print("!!!! NOTE you freezed not pretrained decoder")
     if model_args.freeze_encoder and not model_args.pretrained_encoder:
         print("!!!! NOTE you freezed not pretrained encoder")
+    if model_args.freeze_summary:
+        print("!!!! NOTE you freezed summary embeddings")
+    if model_args.freeze_linear:
+        print("!!!! NOTE you freezed linear layer")
 
     return model_args, data_args, training_args
 

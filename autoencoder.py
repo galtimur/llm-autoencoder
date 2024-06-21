@@ -4,7 +4,6 @@ from typing import Dict, Tuple
 import torch
 import torch.nn as nn
 from peft import LoraConfig, get_peft_model
-from safetensors.torch import load_file
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 
@@ -20,9 +19,9 @@ def print_trainable_parameters(model, print_all_trainable: bool = False) -> None
         all_param += param.numel()
         if param.requires_grad:
             trainable_parameters += param.numel()
-    train_pars_str = f"trainable params: {trainable_parameters}"
-    all_param_str = f"all params: {all_param}"
-    trainable_ratio_str = f"trainable %: {100 * trainable_parameters / all_param}"
+    train_pars_str = f"trainable params: {(trainable_parameters/1e6):.2f}M"
+    all_param_str = f"all params: {(all_param/1e6):.0f}M"
+    trainable_ratio_str = f"trainable %: {(100 * trainable_parameters / all_param):.3f}"
     print(f"{train_pars_str} || {all_param_str} || {trainable_ratio_str}")
     if print_all_trainable:
         for name, param in model.named_parameters():
@@ -36,6 +35,13 @@ def print_num_parameters(model, model_name: str = "") -> None:
     if len(model_name) > 0:
         add_model_name = f" in {model_name}"
     print(f"Number of parameters{add_model_name}: {total_params / 1e6:.0f}M")
+
+
+def print_trainable_names(model) -> None:
+    print("Trainble parameters:")
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            print(name)
 
 
 def get_model(
@@ -206,13 +212,15 @@ class AutoencoderLP(torch.nn.Module):
         self.embed_compress = nn.Embedding(
             1, dim, device=self.device, dtype=self.dtype
         )  # + [AE] + [SUMM] tokens
-        self.trainable_modules.append(self.embed_summary)
+        if not self.model_args.freeze_summary:
+            self.trainable_modules.append(self.embed_summary)
         if self.task_type == "autocompressor":
             self.trainable_modules.append(self.embed_compress)
 
         if self.model_args.use_linear_layer:
             self.linear = nn.Linear(dim, dim, device=self.device, dtype=self.dtype)
-            self.trainable_modules.append(self.linear)
+            if not self.model_args.freeze_linear:
+                self.trainable_modules.append(self.linear)
         else:
             self.linear = nn.Identity()
 
@@ -224,17 +232,23 @@ class AutoencoderLP(torch.nn.Module):
         if self.model_args.freeze_encoder:
             freeze_model(self.encoder)
             self.encoder.eval()
+        if self.model_args.freeze_summary:
+            freeze_model(self.embed_summary)
+            self.embed_summary.eval()
+        if self.model_args.freeze_linear:
+            freeze_model(self.linear)
+            self.linear.eval()
         print_trainable_parameters(self)
-        if (
-            self.training_args.restore_from is not None
-            and self.training_args.restore_from != ""
-        ):
-            print(
-                f"Loading from the pretrained checkpoint: {self.training_args.restore_from}..."
-            )
-            state_dict = load_file(self.training_args.restore_from)
-            self.load_state_dict(state_dict)
-            print(f"Finished loading from {self.training_args.restore_from}")
+        # if (
+        #     self.training_args.restore_from is not None
+        #     and self.training_args.restore_from != ""
+        # ):
+        #     print(
+        #         f"Loading from the pretrained checkpoint: {self.training_args.restore_from}..."
+        #     )
+        #     state_dict = load_file(self.training_args.restore_from)
+        #     self.load_state_dict(state_dict)
+        #     print(f"Finished loading from {self.training_args.restore_from}")
 
     def embed_tokens(self, input_ids: torch.LongTensor) -> torch.Tensor:
         if self.model_args.lora_encoder:
