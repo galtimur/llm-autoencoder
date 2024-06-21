@@ -107,6 +107,7 @@ class AutoencoderLP(torch.nn.Module):
         self.model_args = args["model"]
         self.training_args = args["train"]
 
+        self.task_type = self.model_args.task_type
         self.compression_rate = self.training_args.compression_rate
         self.segment_length = self.training_args.segment_length
         self.num_summary = self.segment_length // self.compression_rate
@@ -138,8 +139,13 @@ class AutoencoderLP(torch.nn.Module):
             self.encoder = apply_lora(self.encoder, self.model_args)
         self.embed_summary = nn.Embedding(
             self.num_summary + 1, self.dim, device=self.device, dtype=self.dtype
-        )  # + [AE] token
+        )  # + [AE] + [SUMM] tokens
+        self.embed_compress = nn.Embedding(
+            1, self.dim, device=self.device, dtype=self.dtype
+        )  # + [AE] + [SUMM] tokens
         self.trainable_modules.append(self.embed_summary)
+        if self.task_type == "autocompressor":
+            self.trainable_modules.append(self.embed_compress)
         print("Loading decoder")
         self.decoder = self.get_decoder(
             self.model_args.share_enc_dec,
@@ -178,9 +184,13 @@ class AutoencoderLP(torch.nn.Module):
             dtype=torch.long,
             device=self.device,
         ).unsqueeze(0)
+        # Token after which the autoencoder starts
         self.ae_id = self.num_summary
-        # self.mask_id = self.num_summary + 1
+        # Token after which the continuation starts
+        self.summ_id = 0 # self.num_summary + 1
+        # self.mask_id = self.num_summary + 2
         self.ae_tok = torch.tensor([[self.ae_id]], device=self.device)
+        self.summ_tok = torch.tensor([[self.summ_id]], device=self.device)
         # self.mask_tok = torch.tensor([[self.mask_id]], device=self.device)
 
         return vocab_size_new
@@ -229,21 +239,39 @@ class AutoencoderLP(torch.nn.Module):
             self.load_state_dict(state_dict)
             print(f"Finished loading from {self.training_args.restore_from}")
 
-    def forward(self, input_ids: torch.LongTensor = None) -> Dict:
-        batch_size = input_ids.size(0)
+    def embed_tokens(self, input_ids: torch.LongTensor) -> torch.Tensor:
+        if self.model_args.lora_encoder:
+            input_embeds = self.encoder.get_base_model().model.embed_tokens(input_ids)
+        else:
+            input_embeds = self.encoder.model.embed_tokens(input_ids)
 
-        ae_embed = self.embed_summary(self.ae_tok).repeat(batch_size, 1, 1)
+        return input_embeds
+
+    def get_inputs(self, input_ids):
+        if self.task_type == "autoencoder":
+            prefix, suffix = input_ids, input_ids
+        elif self.task_type == "autocompressor":
+            prefix, suffix = input_ids[:, 0, :], input_ids[:, 1, :]
+        return prefix, suffix
+
+    def forward(self, input_ids: torch.LongTensor) -> Dict:
+        batch_size = input_ids.size(0)
+        prefix, suffix = self.get_inputs(input_ids)
+
         summ_tokens = self.summ_tokens.repeat(batch_size, 1)
 
         # 1. Embed summary and input tokens. Concat them.
         summ_input_embeds = self.embed_summary(summ_tokens)
-        if self.model_args.lora_encoder:
-            segment_input_embeds = self.encoder.get_base_model().model.embed_tokens(
-                input_ids
-            )
-        else:
-            segment_input_embeds = self.encoder.model.embed_tokens(input_ids)
-        input_embeds = torch.cat([segment_input_embeds, summ_input_embeds], dim=1)
+        prefix_input_embeds = self.embed_tokens(prefix)
+
+        if self.task_type == "autoencoder":
+            suffix_input_embeds = prefix_input_embeds
+            sep_embed = self.embed_summary(self.ae_tok).repeat(batch_size, 1, 1)
+        elif self.task_type == "autocompressor":
+            suffix_input_embeds = self.embed_tokens(prefix)
+            sep_embed = self.embed_compress(self.summ_tok).repeat(batch_size, 1, 1)
+
+        input_embeds = torch.cat([prefix_input_embeds, summ_input_embeds], dim=1)
 
         # 2. Encode sequence, get summary_embeddings. Apply linear layer
         output = self.encoder(inputs_embeds=input_embeds, output_hidden_states=True)
@@ -252,14 +280,15 @@ class AutoencoderLP(torch.nn.Module):
 
         # 3. Decoder input consists of summary_embeddings, autoencoder token embed and original sequence.
         dec_input_embeds = torch.cat(
-            [summary_embeds, ae_embed, segment_input_embeds], dim=1
+            [summary_embeds, sep_embed, suffix_input_embeds], dim=1
         )
+
         decoder_outputs = self.decoder(inputs_embeds=dec_input_embeds)
         logits = decoder_outputs.logits
 
         # 4. Calculate loss on the original sequence.
-        logits = logits[:, -self.segment_length : -1, :].reshape(-1, logits.size(-1))
-        target_ids = input_ids[:, 1:].reshape(-1)
+        logits = logits[:, -self.segment_length - 1: -1, :].reshape(-1, logits.size(-1))
+        target_ids = suffix.reshape(-1)
         loss = self.loss_fn(logits, target_ids)
         # loss_mask = torch.randint_like(target_ids, 0, 2).to(logits.dtype)
 

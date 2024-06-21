@@ -28,7 +28,6 @@ def calc_grad_norm(module_list: List) -> float:
 def save_model(model, checkpoint_folder: str | Path, current_state: dict):
     checkpoint_folder = Path(checkpoint_folder)
     checkpoint_path = checkpoint_folder / "checkpoint.pt"
-    config_path = checkpoint_folder / "config.json"
     torch.save(
         {
             "tokens": current_state["tokens"],
@@ -38,7 +37,6 @@ def save_model(model, checkpoint_folder: str | Path, current_state: dict):
         },
         checkpoint_path,
     )
-    model.config.save_pretrained(config_path)
 
 
 def load_model(checkpoint_folder: str | Path) -> Dict:
@@ -133,6 +131,11 @@ class Trainer:
         self.progress_train = tqdm(train_dl, total=len(train_dl))
         self.val_dl = val_dl
 
+        if args["model"].task_type == "autocompressor":
+            self.loss_prefix = "AuCo/"
+        else:
+            self.loss_prefix = ""
+
         # Initialize wandb
         self.wandb_init()
         shutil.copy(config_path, os.path.join(self.output_dir, "config.yaml"))
@@ -149,7 +152,7 @@ class Trainer:
             name=wandb_run_name,
         )
         wandb.define_metric("Tokens")
-        wandb.define_metric("loss vs tokens", step_metric="Tokens")
+        wandb.define_metric(f"{self.loss_prefix}loss vs tokens", step_metric="Tokens")
         wandb.define_metric("val/loss vs tokens", step_metric="Tokens")
         wandb.run.log_code(".")
 
@@ -183,9 +186,9 @@ class Trainer:
                     grad_norm = calc_grad_norm(self.model.trainable_modules)
                     self.progress_train.set_postfix({"loss": train_loss}, refresh=True)
                     log_dict = {
-                        "loss": train_loss,
-                        "loss vs tokens": train_loss,
-                        "grad_norm": grad_norm,
+                        f"{self.loss_prefix}loss": train_loss,
+                        f"{self.loss_prefix}loss vs tokens": train_loss,
+                        f"{self.loss_prefix}grad_norm": grad_norm,
                         "Tokens": tokens_consumed,
                     }
                     wandb.log(log_dict)
@@ -197,8 +200,8 @@ class Trainer:
                 if step % self.eval_steps == 0:
                     log_dict = {"Tokens": tokens_consumed}
                     if self.val_ce:
-                        loss = self.validate_ce()
-                        log_dict.update({"val/loss": loss, "val/loss vs tokens": loss})
+                        val_loss = self.validate_ce()
+                        log_dict.update({"val/loss": val_loss, "val/loss vs tokens": val_loss})
                     if self.val_em:
                         em = self.validate_em()
                         log_dict.update(
@@ -208,11 +211,7 @@ class Trainer:
 
                 if step % self.save_steps == 0:
                     print(f"Saving checkpoint to {self.output_dir}")
-                    if isinstance(loss, torch.Tensor):
-                        loss_float = loss.item()
-                    else:
-                        loss_float = loss
-                    current_state = {"tokens": tokens_consumed, "loss": loss_float}
+                    current_state = {"tokens": tokens_consumed, "loss": loss.item()}
                     save_model(self.model, self.output_dir, current_state)
                 step += 1
 

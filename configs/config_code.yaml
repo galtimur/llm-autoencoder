@@ -32,9 +32,9 @@ DataArguments:
 
 TrainingArguments:
   cache_dir: null
-  output_dir: /mnt/data2/galimzyanov/llm-autoencoder/output/deep-seek-train-enc-10x
+  output_dir: /mnt/data2/galimzyanov/llm-autoencoder/output/auco-4x
   optim: "adamw_torch"
-  batch_size_mini: 10
+  batch_size_mini: 20
   batch_size_global: 100
   batch_size_outer: 1
   num_train_epochs: 1
