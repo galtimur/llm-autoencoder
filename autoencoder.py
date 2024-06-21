@@ -108,76 +108,34 @@ class AutoencoderLP(torch.nn.Module):
         self.training_args = args["train"]
 
         self.task_type = self.model_args.task_type
+        self.model_name = self.model_args.model_name_or_path
+        self.dtype = torch.bfloat16 if self.training_args.bf16 else torch.float16
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         self.compression_rate = self.training_args.compression_rate
         self.segment_length = self.training_args.segment_length
         self.num_summary = self.segment_length // self.compression_rate
 
-        # Getting the base models: encoder and decoder
         self.trainable_modules = []
-        self.model_name = self.model_args.model_name_or_path
-        self.dtype = torch.bfloat16 if self.training_args.bf16 else torch.float16
-
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print("Loading encoder")
         self.model_pars = {
             "hidden_size": self.model_args.hidden_size,
             "num_layers": self.model_args.num_layers,
         }
-        self.encoder = get_model(
-            self.model_name,
-            self.device,
-            self.dtype,
-            self.model_args.pretrained_encoder,
-            self.model_args.alter_model,
-            self.model_pars,
-        )
-        self.dim = self.encoder.config.hidden_size
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        vocab_size = self.add_tokens(self.encoder.config.vocab_size)  # adds new tokens
-        self.expand_vocab(self.encoder, vocab_size)
-        if self.model_args.lora_encoder:
-            self.encoder = apply_lora(self.encoder, self.model_args)
-        self.embed_summary = nn.Embedding(
-            self.num_summary + 1, self.dim, device=self.device, dtype=self.dtype
-        )  # + [AE] + [SUMM] tokens
-        self.embed_compress = nn.Embedding(
-            1, self.dim, device=self.device, dtype=self.dtype
-        )  # + [AE] + [SUMM] tokens
-        self.trainable_modules.append(self.embed_summary)
-        if self.task_type == "autocompressor":
-            self.trainable_modules.append(self.embed_compress)
-        print("Loading decoder")
-        self.decoder = self.get_decoder(
-            self.model_args.share_enc_dec,
-            self.model_args.init_same_weights,
-            self.model_args.pretrained_decoder,
-        )
-        self.expand_vocab(self.decoder, vocab_size)
-        if self.model_args.use_linear_layer:
-            self.linear = nn.Linear(
-                self.dim, self.dim, device=self.device, dtype=self.dtype
-            )
-            self.trainable_modules.append(self.linear)
-        else:
-            self.linear = nn.Identity()
 
-        if not self.model_args.freeze_decoder:
-            if self.model_args.lora_decoder:
-                self.decoder = apply_lora(self.decoder, self.model_args)
-            self.trainable_modules.append(self.decoder)
-        if not self.model_args.freeze_encoder:
-            self.trainable_modules.append(self.encoder)
-
+        self.encoder = self.setup_encoder()
+        self.add_tokens(self.model_name)  # adds new tokens
+        self.setup_new_embeddings_and_linear()
+        self.decoder = self.setup_decoder()
         self.loss_fn = nn.CrossEntropyLoss(ignore_index=-100)
 
         self.initialize()
         pass
 
-    def add_tokens(self, vocab_size: int) -> int:
-        vocab_size_new = vocab_size
+    def add_tokens(self, model_name: str) -> None:
 
-        self.bos_id = self.tokenizer.bos_token_id
-        self.eos_id = self.tokenizer.eos_token_id
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.bos_id = tokenizer.bos_token_id
+        self.eos_id = tokenizer.eos_token_id
         self.summ_tokens = torch.arange(
             0,
             self.num_summary,
@@ -193,7 +151,6 @@ class AutoencoderLP(torch.nn.Module):
         self.summ_tok = torch.tensor([[self.summ_id]], device=self.device)
         # self.mask_tok = torch.tensor([[self.mask_id]], device=self.device)
 
-        return vocab_size_new
 
     def expand_vocab(self, model, vocab_size: int):
         if hasattr(self, "pad_id"):
@@ -202,22 +159,67 @@ class AutoencoderLP(torch.nn.Module):
         model.config.eos_token_id = self.eos_id
         model.resize_token_embeddings(vocab_size)
 
-    def get_decoder(
-        self, share_enc_dec: bool, init_same_weights: bool, pretrained_decoder: bool
-    ):
-        if share_enc_dec:
-            return self.encoder
-        elif not init_same_weights:
-            return get_model(
+    def setup_decoder(self):
+        print("Loading decoder")
+        if self.model_args.share_enc_dec:
+            decoder = self.encoder
+        elif not self.model_args.init_same_weights:
+            decoder = get_model(
                 self.model_name,
                 self.device,
                 self.dtype,
-                pretrained_decoder,
+                self.model_args.pretrained_decoder,
                 self.model_args.alter_model,
                 self.model_pars,
             )
         else:
-            return copy.deepcopy(self.encoder)
+            decoder = copy.deepcopy(self.encoder)
+
+        if not self.model_args.freeze_decoder:
+            if self.model_args.lora_decoder:
+                decoder = apply_lora(decoder, self.model_args)
+            self.trainable_modules.append(decoder)
+
+        return decoder
+
+    def setup_encoder(self):
+        print("Loading encoder")
+        encoder = get_model(
+            self.model_name,
+            self.device,
+            self.dtype,
+            self.model_args.pretrained_encoder,
+            self.model_args.alter_model,
+            self.model_pars,
+        )
+        if self.model_args.lora_encoder:
+            encoder = apply_lora(encoder, self.model_args)
+        if not self.model_args.freeze_encoder:
+            self.trainable_modules.append(encoder)
+
+        return encoder
+
+    def setup_new_embeddings_and_linear(self):
+
+        dim = self.encoder.config.hidden_size
+        self.embed_summary = nn.Embedding(
+            self.num_summary + 1, dim, device=self.device, dtype=self.dtype
+        )  # + [AE] + [SUMM] tokens
+        self.embed_compress = nn.Embedding(
+            1, dim, device=self.device, dtype=self.dtype
+        )  # + [AE] + [SUMM] tokens
+        self.trainable_modules.append(self.embed_summary)
+        if self.task_type == "autocompressor":
+            self.trainable_modules.append(self.embed_compress)
+
+        if self.model_args.use_linear_layer:
+            self.linear = nn.Linear(
+                dim, dim, device=self.device, dtype=self.dtype
+            )
+            self.trainable_modules.append(self.linear)
+        else:
+            self.linear = nn.Identity()
+
 
     def initialize(self) -> None:
         print("Freezing the decoder...")
