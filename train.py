@@ -39,7 +39,7 @@ def save_model(model, checkpoint_folder: str | Path, current_state: dict):
     )
 
 
-def load_model(checkpoint_folder: str | Path) -> Dict:
+def load_model_from_checkpoint(checkpoint_folder: str | Path) -> Dict:
     print("------- Loading the model from the checkpoint -------")
 
     checkpoint_folder = Path(checkpoint_folder)
@@ -60,6 +60,28 @@ def load_model(checkpoint_folder: str | Path) -> Dict:
         print(f"Last loss: {loss}")
 
     return {"model": autoencoder, "args": args}
+
+
+def load_model_weights(
+    autoencoder: AutoencoderLP, checkpoint_folder: str | Path
+) -> Dict:
+    print("------- Loading the weights from the checkpoint -------")
+    print(f"Path: {checkpoint_folder}")
+
+    checkpoint_folder = Path(checkpoint_folder)
+    checkpoint_path = checkpoint_folder / "checkpoint.pt"
+
+    checkpoint = torch.load(checkpoint_path)
+    autoencoder.load_state_dict(checkpoint["model_state_dict"])
+
+    if "tokens" in checkpoint:
+        tokens = checkpoint["tokens"]
+        print(f"Number of tokens trained: {tokens}")
+    if "tokens" in checkpoint:
+        loss = checkpoint["loss"]
+        print(f"Last loss: {loss}")
+
+    return autoencoder
 
 
 def change_model_mode(module_list: List, mode: str) -> None:
@@ -104,6 +126,8 @@ class Trainer:
         args: Dict,
         config_path: str | Path,
     ):
+        if args["model"].model_weights_path is not None:
+            model = load_model_weights(model, args["model"].model_weights_path)
         self.args = args
         self.train_args = args["train"]
         self.task_type = args["model"].task_type
@@ -132,10 +156,12 @@ class Trainer:
         self.progress_train = tqdm(train_dl, total=len(train_dl))
         self.val_dl = val_dl
 
-        prefix_dict = {"autocompressor": "AuCo/",
-                       "base": "AuCo/",
-                       "base_no_context": "AuCo/",
-                       "autoencoder": ""}
+        prefix_dict = {
+            "autocompressor": "AuCo/",
+            "base": "AuCo/",
+            "base_no_context": "AuCo/",
+            "autoencoder": "",
+        }
 
         self.loss_prefix = prefix_dict[self.task_type]
 
@@ -146,10 +172,12 @@ class Trainer:
     def wandb_init(self):
         model_name = self.args["model"].model_name_or_path.split("/")[-1]
 
-        name_dict = {"autoencoder": "AuEnc",
-                     "autocompressor": "AuCo",
-                     "base": "Base",
-                     "base_no_context": "NoCtxt"}
+        name_dict = {
+            "autoencoder": "AuEnc",
+            "autocompressor": "AuCo",
+            "base": "Base",
+            "base_no_context": "NoCtxt",
+        }
 
         wandb_run_name = name_dict[self.task_type]
         wandb_run_name += f"_cr_{self.train_args.compression_rate}"

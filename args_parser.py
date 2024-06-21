@@ -16,6 +16,9 @@ class ModelArguments:
         default="autoencoder",
         metadata={"help": "options: 'autoencoder', 'autocompressor', 'base'"},
     )
+    model_weights_path: str = field(
+        default=None, metadata={"help": "Path to the model weights"}
+    )
     flash_attn: bool = field(default=True)
     pretrained_encoder: bool = field(
         default=True, metadata={"help": "Start from pretrained encoder"}

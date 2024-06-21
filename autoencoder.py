@@ -108,6 +108,7 @@ class AutoencoderLP(torch.nn.Module):
         self.training_args = args["train"]
 
         self.task_type = self.model_args.task_type
+        print(f"------- Task type is {self.task_type} -------")
         self.model_name = self.model_args.model_name_or_path
         self.dtype = torch.bfloat16 if self.training_args.bf16 else torch.float16
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -314,7 +315,9 @@ class AutoencoderLP(torch.nn.Module):
         decoder_outputs = self.decoder(inputs_embeds=dec_input_embeds)
 
         # 4. Calculate loss on the original sequence.
-        logits, target_ids = self.get_logits_and_targets(decoder_outputs.logits, suffix_ids)
+        logits, target_ids = self.get_logits_and_targets(
+            decoder_outputs.logits, suffix_ids
+        )
         loss = self.loss_fn(logits, target_ids)
         # loss_mask = torch.randint_like(target_ids, 0, 2).to(logits.dtype)
 

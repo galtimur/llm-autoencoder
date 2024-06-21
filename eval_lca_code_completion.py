@@ -1,11 +1,7 @@
-import json
-import re
 import time
-from functools import partial
-from pathlib import Path
 
 import torch
-from datasets import load_dataset, load_from_disk
+from datasets import load_dataset
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from transformers.generation import StoppingCriteria, StoppingCriteriaList
