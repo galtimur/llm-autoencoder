@@ -111,7 +111,11 @@ class TrainingArguments(transformers.TrainingArguments):
     # TODO may be do it in terms of samples or segments
     max_eval_steps: int = field(
         default=100,
-        metadata={"help": "How many samples to use for validation."},
+        metadata={"help": "How many steps to use for validation."},
+    )
+    max_eval_samples: int = field(
+        default=100,
+        metadata={"help": "How many samples (original) to use for validation."},
     )
     batch_size_mini: int = field(
         default=1,

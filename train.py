@@ -191,7 +191,7 @@ class Trainer:
         )
         wandb.define_metric("Tokens")
         wandb.define_metric(f"{self.loss_prefix}loss vs tokens", step_metric="Tokens")
-        wandb.define_metric("val/loss vs tokens", step_metric="Tokens")
+        wandb.define_metric(f"{self.loss_prefix}val/loss vs tokens", step_metric="Tokens")
         wandb.run.log_code(".")
 
     def set_train(self) -> None:
@@ -235,12 +235,12 @@ class Trainer:
                     train_loss = 0
 
                 # validation
-                if step % self.eval_steps == 0:
+                if (step - 1) % self.eval_steps == 0:
                     log_dict = {"Tokens": tokens_consumed}
                     if self.val_ce:
                         val_loss = self.validate_ce()
                         log_dict.update(
-                            {"val/loss": val_loss, "val/loss vs tokens": val_loss}
+                            {f"{self.loss_prefix}val/loss": val_loss, f"{self.loss_prefix}val/loss vs tokens": val_loss}
                         )
                     if self.val_em:
                         em = self.validate_em()

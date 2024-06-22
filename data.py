@@ -2,8 +2,9 @@ from typing import Dict, List, Tuple
 
 import torch
 from datasets import load_dataset
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset, RandomSampler
 from transformers import AutoTokenizer
+import numpy as np
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -91,16 +92,6 @@ def get_dataloader(split: str, args: Dict, tokenizer: AutoTokenizer) -> DataLoad
     training_args = args["train"]
     data_args = args["data"]
 
-    # TODO make it better. Possibly move to a class
-    if split == "train":
-        dataset_name = data_args.train_dataset_name
-        data_subname = data_args.train_dataset_subname
-        data_subdir = data_args.train_dataset_subdir
-    elif split == "val":
-        dataset_name = data_args.val_dataset_name
-        data_subname = data_args.val_dataset_subname
-        data_subdir = data_args.val_dataset_subdir
-
     seg_len = training_args.segment_length
     batch_size_mini = training_args.batch_size_mini
     batch_size_outer = training_args.batch_size_outer
@@ -113,13 +104,30 @@ def get_dataloader(split: str, args: Dict, tokenizer: AutoTokenizer) -> DataLoad
         task_type=args["model"].task_type,
     )
 
+    # TODO make it better. Possibly move to a class
+    if split == "train" or data_args.val_dataset_name == "train":
+        dataset_name = data_args.train_dataset_name
+        data_subname = data_args.train_dataset_subname
+        data_subdir = data_args.train_dataset_subdir
+    elif split == "val":
+        dataset_name = data_args.val_dataset_name
+        data_subname = data_args.val_dataset_subname
+        data_subdir = data_args.val_dataset_subdir
+
     dataset = load_dataset(dataset_name, name=data_subname, data_dir=data_subdir)[
         "train"
     ]
-    dataset = dataset.shuffle(data_args.rnd_seed)
+    if data_args.val_dataset_name == "train":
+        val_samples = training_args.max_eval_samples
+        if split == "train":
+            sample_range = np.arange(len(dataset)-val_samples)
+        if split == "val":
+            sample_range = np.arange(len(dataset) - val_samples, len(dataset))
+        dataset = Subset(dataset, sample_range)
+    # dataset = dataset.shuffle(data_args.rnd_seed)
 
     dataloader = DataLoader(
-        dataset, batch_size=batch_size_outer, collate_fn=custom_batcher
+        dataset, batch_size=batch_size_outer, sampler=RandomSampler(dataset), collate_fn=custom_batcher
     )
 
     return dataloader
