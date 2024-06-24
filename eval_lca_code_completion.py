@@ -46,65 +46,67 @@ class StopOnNewLine(StoppingCriteria):
             return False
 
 
-def eval_on_lcc(
-    modules: dict,
-    ds_test: str | None,
-    context_size: int,
-    limit: int | None = None,
-    log_negatives: bool = False,
-) -> dict:
-    model, tokenizer = (modules["model"], modules["tokenizer"])
-    device = model.device
+class FLCC_evaluator:
 
-    stopping_criteria = StoppingCriteriaList([StopOnNewLine(tokenizer)])
-    if ds_test is None:
+    def __init__(self, model, tokenizer):
+        self.tokenizer = tokenizer
+        self.model = model
+
+        stopper = StopOnNewLine(tokenizer)
+        self.stop_list = stopper.stop_ids
+
+    def eval_on_lcc(
+        self,
+        summ_len: int,
+        context_len: int,
+        limit: int | None = None,
+        log_negatives: bool = False,
+        model_name: str = ""
+    ) -> dict:
+
+        device = self.model.device
         ds_test = LcaPythonCompletionDataset()
-    max_comp = 128  # max length of the line
-    max_len_ctx = (
-        context_size - max_comp
-    )  # input context should be less that model context size minus max line length
-    assert max_len_ctx > 0, "max_len_ctx should be positive!"
+        full_ctx_len = summ_len + context_len
 
-    grtrs = []
-    preds = []
+        grtrs = []
+        preds = []
 
-    num_samples = len(ds_test) if limit is None else limit
-    ds_test = ds_test[:num_samples]
-    if log_negatives:
-        with open(f"out/false_preds_{model_name}.txt", "a") as f:
-            f.write("----- New eval -----\n")
+        num_samples = len(ds_test) if limit is None else limit
+        ds_test = ds_test[:num_samples]
+        # if log_negatives:
+        #     with open(f"out/false_preds_{model_name}.txt", "a") as f:
+        #         f.write("----- New eval -----\n")
 
-    start_time = time.time()
-    for sample in tqdm(ds_test):
-        input_ids = tokenizer.encode(sample["context"], return_tensors="pt")
-        input_ids = input_ids[:, -max_len_ctx:].to(device)
+        start_time = time.time()
+        for sample in tqdm(ds_test):
+            input_ids = self.tokenizer.encode(sample["context"], return_tensors="pt")
+            input_ids = input_ids[:, -full_ctx_len:].to(device)
 
-        model_kwargs = {
-            "input_ids": input_ids,
-            "max_new_tokens": max_comp,
-            "stopping_criteria": stopping_criteria,
-            "pad_token_id": tokenizer.pad_token_id,
-            "do_sample": False,
+
+            model_kwargs = {
+                "inputs": (input_ids[:, :summ_len], input_ids[:, -context_len:]),
+                "max_new_tokens": 128,
+                "stop_list": self.stop_list,
+            }
+            with torch.no_grad():
+                out_tokens = self.model.generate(**model_kwargs)
+
+            out_tokens = out_tokens[0]
+            # out_tokens = out[0, len(input_ids[0]) - 1 :]
+            pred = self.tokenizer.decode(out_tokens).strip("\n")
+            preds.append(pred)
+            grtrs.append(sample["gt"])
+            if pred != sample["gt"]:
+                with open(f"out/false_preds_{model_name}.txt", "a") as f:
+                    f.write(f"{pred} --> {sample['gt']}\n")
+
+        time_used_cc = time.time() - start_time
+        exact_match = sum(gt == pr for gt, pr in zip(grtrs, preds)) / len(preds)
+
+        results = {
+            "exact_match_rate": exact_match,
+            "Code completion items/s": num_samples / time_used_cc,
+            "number of CC items": num_samples,
         }
 
-        with torch.no_grad():
-            out = model.generate(**model_kwargs)
-
-        out_tokens = out[0, len(input_ids[0]) - 1 :]
-        pred = tokenizer.decode(out_tokens).strip("\n")
-        preds.append(pred)
-        grtrs.append(sample["gt"])
-        if pred != sample["gt"]:
-            with open(f"out/false_preds_{model_name}.txt", "a") as f:
-                f.write(f"{pred} --> {sample['gt']}\n")
-
-    time_used_cc = time.time() - start_time
-    exact_match = sum(gt == pr for gt, pr in zip(grtrs, preds)) / len(preds)
-
-    results = {
-        "exact_match_rate": exact_match,
-        "Code completion items/s": num_samples / time_used_cc,
-        "number of CC items": num_samples,
-    }
-
-    return results
+        return results
