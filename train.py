@@ -59,7 +59,7 @@ def load_model_from_checkpoint(checkpoint_folder: str | Path) -> Dict:
         loss = checkpoint["loss"]
         print(f"Last loss: {loss}")
 
-    return {"model": autoencoder, "args": args}
+    return {"model": autoencoder, "tokenizer": autoencoder.tokenizer, "args": args}
 
 
 def load_model_weights(

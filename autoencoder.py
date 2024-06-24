@@ -139,9 +139,9 @@ class AutoencoderLP(torch.nn.Module):
         pass
 
     def add_tokens(self, model_name: str) -> None:
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.bos_id = tokenizer.bos_token_id
-        self.eos_id = tokenizer.eos_token_id
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.bos_id = self.tokenizer.bos_token_id
+        self.eos_id = self.tokenizer.eos_token_id
         self.summ_tokens = torch.arange(
             0,
             self.num_summary,
@@ -338,16 +338,17 @@ class AutoencoderLP(torch.nn.Module):
         return {"loss": loss, "logits": logits}
 
 
-    def generate(self, inputs: Tuple[torch.LongTensor, torch.LongTensor], max_length: int = 50) -> torch.LongTensor:
+    def generate(self, inputs: Tuple[torch.LongTensor, torch.LongTensor], max_new_tokens: int = 128, stop_list: set = {}) -> torch.LongTensor:
 
         '''
+        Written only batch_size = 1 because of the stop_list implementation
         inputs is Tuple[LongTensor, LongTensor] - prefix and suffix
         prefix - is a context for the generation. Can be compressed by Autocompressor or used directly by the model
         suffix - the main sequence from which the generation is performed
         '''
 
         self.eval()
-
+        stop_list.add(self.eos_id)
         prefix_ids, suffix_ids = inputs
         batch_size = 1
         summ_tokens = self.summ_tokens.repeat(batch_size, 1)
@@ -377,7 +378,8 @@ class AutoencoderLP(torch.nn.Module):
         generated_ids = []
         past_key_values = None
 
-        for _ in range(max_length):
+        n_symbols = 0
+        for _ in range(max_new_tokens):
             decoder_outputs = self.decoder(
                 inputs_embeds=dec_input_embeds,
                 past_key_values=past_key_values,
@@ -392,8 +394,9 @@ class AutoencoderLP(torch.nn.Module):
 
             past_key_values = decoder_outputs.past_key_values
 
-            if next_token_id.item() == self.eos_id:
+            if next_token_id.item() in stop_list and n_symbols>0:
                 break
+            n_symbols += 1
 
         generated_ids = torch.cat(generated_ids, dim=1)
         return generated_ids
