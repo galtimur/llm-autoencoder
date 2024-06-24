@@ -118,6 +118,8 @@ def get_dataloader(split: str, args: Dict, tokenizer: AutoTokenizer) -> DataLoad
         "train"
     ]
     if data_args.val_dataset_name == "train":
+        # This is implemented to the Stack dataset.
+        # I split the dataset not randomly, to avoid files from similar repositories.
         val_samples = training_args.max_eval_samples
         if split == "train":
             sample_range = np.arange(len(dataset)-val_samples)
@@ -125,9 +127,11 @@ def get_dataloader(split: str, args: Dict, tokenizer: AutoTokenizer) -> DataLoad
             sample_range = np.arange(len(dataset) - val_samples, len(dataset))
         dataset = Subset(dataset, sample_range)
     # dataset = dataset.shuffle(data_args.rnd_seed)
+    generator = torch.Generator()
+    generator.manual_seed(data_args.rnd_seed)
 
     dataloader = DataLoader(
-        dataset, batch_size=batch_size_outer, sampler=RandomSampler(dataset), collate_fn=custom_batcher
+        dataset, batch_size=batch_size_outer, sampler=RandomSampler(dataset, generator=generator), collate_fn=custom_batcher
     )
 
     return dataloader
