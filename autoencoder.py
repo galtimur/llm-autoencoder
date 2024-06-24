@@ -336,3 +336,64 @@ class AutoencoderLP(torch.nn.Module):
         # loss_mask = torch.randint_like(target_ids, 0, 2).to(logits.dtype)
 
         return {"loss": loss, "logits": logits}
+
+
+    def generate(self, inputs: Tuple[torch.LongTensor, torch.LongTensor], max_length: int = 50) -> torch.LongTensor:
+
+        '''
+        inputs is Tuple[LongTensor, LongTensor] - prefix and suffix
+        prefix - is a context for the generation. Can be compressed by Autocompressor or used directly by the model
+        suffix - the main sequence from which the generation is performed
+        '''
+
+        self.eval()
+
+        prefix_ids, suffix_ids = inputs
+        batch_size = 1
+        summ_tokens = self.summ_tokens.repeat(batch_size, 1)
+
+        (
+            prefix_input_embeds,
+            suffix_input_embeds,
+            summ_input_embeds,
+            sep_embed,
+        ) = self.get_embeds(prefix_ids, suffix_ids, summ_tokens, batch_size)
+
+        if self.task_type == "autocompressor":
+            input_embeds = torch.cat([prefix_input_embeds, summ_input_embeds], dim=1)
+            output = self.encoder(inputs_embeds=input_embeds, output_hidden_states=True)
+            summary_embeds = output.hidden_states[-1][:, -self.num_summary :]
+            summary_embeds = self.linear(summary_embeds)
+            dec_input_embeds = torch.cat(
+                [summary_embeds, sep_embed, suffix_input_embeds], dim=1
+            )
+        elif self.task_type == "base":
+            dec_input_embeds = torch.cat(
+                [prefix_input_embeds, suffix_input_embeds], dim=1
+            )
+        elif self.task_type == "base_no_context":
+            dec_input_embeds = suffix_input_embeds
+
+        generated_ids = []
+        past_key_values = None
+
+        for _ in range(max_length):
+            decoder_outputs = self.decoder(
+                inputs_embeds=dec_input_embeds,
+                past_key_values=past_key_values,
+                use_cache=True
+            )
+            next_token_logits = decoder_outputs.logits[:, -1, :]
+            next_token_id = torch.argmax(next_token_logits, dim=-1)
+            generated_ids.append(next_token_id.unsqueeze(1))
+
+            next_token_embed = self.embed_tokens(next_token_id).unsqueeze(1)
+            dec_input_embeds = next_token_embed
+
+            past_key_values = decoder_outputs.past_key_values
+
+            if next_token_id.item() == self.eos_id:
+                break
+
+        generated_ids = torch.cat(generated_ids, dim=1)
+        return generated_ids
