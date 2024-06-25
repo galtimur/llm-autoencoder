@@ -170,7 +170,9 @@ class Trainer:
         shutil.copy(config_path, os.path.join(self.output_dir, "config.yaml"))
 
     def wandb_init(self):
-        model_name = self.args["model"].model_name_or_path.split("/")[-1]
+        encoder_name = self.args["model"].encoder_name_or_path.split("/")[-1]
+        decoder_name = self.args["model"].decoder_name_or_path.split("/")[-1]
+        model_name = encoder_name + "_" + decoder_name
 
         name_dict = {
             "autoencoder": "AuEnc",
@@ -180,6 +182,8 @@ class Trainer:
         }
 
         wandb_run_name = name_dict[self.task_type]
+        if encoder_name != decoder_name:
+            wandb_run_name += "_hybr"
         wandb_run_name += f"_cr_{self.train_args.compression_rate}"
         wandb_run_name += f"_seg_{self.train_args.segment_length}"
         wandb_run_name += f"_batch_{self.batch_size_global}"

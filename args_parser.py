@@ -11,7 +11,8 @@ os.environ["NCCL_IB_DISABLE"] = "1"
 
 @dataclass
 class ModelArguments:
-    model_name_or_path: str = field(default=None)
+    encoder_name_or_path: str = field(default=None)
+    decoder_name_or_path: str = field(default=None)
     task_type: str = field(
         default="autoencoder",
         metadata={"help": "options: 'autoencoder', 'autocompressor', 'base'"},
@@ -184,6 +185,10 @@ def process_args(model_args, data_args, training_args) -> Tuple:
         model_args.use_linear_layer = False
 
     training_args.learning_rate = float(training_args.learning_rate)
+
+    if model_args.encoder_name_or_path != model_args.decoder_name_or_path:
+        model_args.init_same_weights = False
+
     if model_args.freeze_decoder and model_args.freeze_encoder:
         print("!!!! NOTE that you freezed both encoder and decoder")
     if model_args.share_enc_dec:

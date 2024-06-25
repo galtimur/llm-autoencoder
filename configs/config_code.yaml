@@ -1,5 +1,6 @@
 ModelArguments:
-  model_name_or_path: "deepseek-ai/deepseek-coder-1.3b-base"
+  encoder_name_or_path: "deepseek-ai/deepseek-coder-1.3b-base"
+  decoder_name_or_path: "deepseek-ai/deepseek-coder-6.7b-base"
   # model_weights_path: /mnt/data2/galimzyanov/llm-autoencoder/output/auenc-4x # null
   task_type: "autocompressor" # options: "autoencoder", "autocompressor"
   pretrained_encoder: true
@@ -9,7 +10,7 @@ ModelArguments:
   freeze_linear: false
   freeze_summary: false
   share_enc_dec: false
-  init_same_weights: true
+  init_same_weights: false
   use_linear_layer: true
   lora_encoder: true
   lora_decoder: false
@@ -35,18 +36,18 @@ DataArguments:
 
 TrainingArguments:
   cache_dir: null
-  output_dir: /mnt/data2/galimzyanov/llm-autoencoder/output/auco-4x_
+  output_dir: /mnt/data2/galimzyanov/llm-autoencoder/output/auco-4x-hybrid_DS-1.3-6.7
   optim: "adamw_torch"
-  batch_size_mini: 15
+  batch_size_mini: 5
   batch_size_global: 100
   batch_size_outer: 1
   num_train_epochs: 1
   segment_length: 128
-  compression_rate: 4
+  compression_rate: 10
   bf16: true
   wandb_project_name: "autoencoder"
   save_steps: 10000
   eval_steps: 3000
   max_eval_steps: 1000
-  max_eval_samples: 4000
+  max_eval_samples: 100000
   learning_rate: 1e-3

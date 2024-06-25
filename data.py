@@ -139,7 +139,8 @@ def get_dataloader(split: str, args: Dict, tokenizer: AutoTokenizer) -> DataLoad
 
 def get_data(args: Dict) -> Tuple[DataLoader, DataLoader]:
     model_args = args["model"]
-    tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path)
+    # TODO. In general, encoder and decoder have different tokenizers
+    tokenizer = AutoTokenizer.from_pretrained(model_args.encoder_name_or_path)
     train_dl = get_dataloader("train", args, tokenizer)
 
     if args["data"].validate_ce:
