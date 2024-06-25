@@ -69,16 +69,16 @@ def get_model(
     return model.to(device)
 
 
-def get_embedder(model: AutoModelForCausalLM) -> nn.Embedding:
-    # Note that works for the model with ROPE, not classic positional encoding
-    if hasattr(model, "model"):
-        embedder = model.model.embed_tokens
-    elif hasattr(model, "base_model"):
-        embedder = model.base_model.embed_tokens
-    else:
-        raise ValueError('model has no "model" or "base_model" attribute')
-
-    return embedder
+# def get_embedder(model: AutoModelForCausalLM) -> nn.Embedding:
+#     # Note that works for the model with ROPE, not classic positional encoding
+#     if hasattr(model, "model"):
+#         embedder = model.model.embed_tokens
+#     elif hasattr(model, "base_model"):
+#         embedder = model.base_model.embed_tokens
+#     else:
+#         raise ValueError('model has no "model" or "base_model" attribute')
+#
+#     return embedder
 
 
 def apply_lora(model, model_args):
@@ -106,7 +106,7 @@ class AutoencoderLP(torch.nn.Module):
     https://arxiv.org/pdf/2307.06945
     """
 
-    def __init__(self, args: Dict):
+    def __init__(self, args: Dict, device: torch.device | str | None = None):
         super().__init__()
 
         # TODO track for devices (not to pass from self.device (??)) in case we run multi-gpu.
@@ -119,7 +119,10 @@ class AutoencoderLP(torch.nn.Module):
         self.decoder_name = self.model_args.decoder_name_or_path
         self.same_models = self.encoder_name == self.decoder_name
         self.dtype = torch.bfloat16 if self.training_args.bf16 else torch.float16
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if device is None:
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            self.device = device
 
         self.compression_rate = self.training_args.compression_rate
         self.segment_length = self.training_args.segment_length
@@ -402,7 +405,7 @@ class AutoencoderLP(torch.nn.Module):
             next_token_id = torch.argmax(next_token_logits, dim=-1)
             generated_ids.append(next_token_id.unsqueeze(1))
 
-            next_token_embed = self.embed_tokens(next_token_id).unsqueeze(1)
+            next_token_embed = self.embed_tokens(next_token_id, self.decoder, has_lora=self.model_args.lora_decoder).unsqueeze(1)
             dec_input_embeds = next_token_embed
 
             past_key_values = decoder_outputs.past_key_values

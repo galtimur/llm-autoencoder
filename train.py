@@ -39,6 +39,14 @@ def save_model(model, checkpoint_folder: str | Path, current_state: dict):
     )
 
 
+def print_cpu_modules(model, device):
+    for name, module in model.named_modules():
+        try:
+            if next(module.parameters()).device.type == device:
+                print(f"Module: {name} is on {device}")
+        except:
+            pass
+
 def load_model_from_checkpoint(checkpoint_folder: str | Path) -> Dict:
     print("------- Loading the model from the checkpoint -------")
 
@@ -47,10 +55,11 @@ def load_model_from_checkpoint(checkpoint_folder: str | Path) -> Dict:
     checkpoint_path = checkpoint_folder / "checkpoint.pt"
 
     args = parse_config(config_path)
-    autoencoder = AutoencoderLP(args)
-
-    checkpoint = torch.load(checkpoint_path)
+    # First we load to cpu memory and then to the GPU to avoid memory overload
+    autoencoder = AutoencoderLP(args)#, device=torch.device("cpu")
+    checkpoint = torch.load(checkpoint_path, map_location=torch.device("cpu"))
     autoencoder.load_state_dict(checkpoint["model_state_dict"])
+    autoencoder = autoencoder.to(torch.device("cuda"))
 
     if "tokens" in checkpoint:
         tokens = checkpoint["tokens"]
