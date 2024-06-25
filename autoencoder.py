@@ -283,7 +283,7 @@ class AutoencoderLP(torch.nn.Module):
         if not "base" in self.task_type:
             prefix_input_embeds = self.embed_tokens(prefix_ids, self.encoder, has_lora=self.model_args.lora_encoder)
         else:
-            prefix_input_embeds = self.embed_tokens(suffix_ids, self.decoder, has_lora=self.model_args.lora_decoder)
+            prefix_input_embeds = self.embed_tokens(prefix_ids, self.decoder, has_lora=self.model_args.lora_decoder)
 
         if self.task_type == "autoencoder" and self.same_models:
             suffix_input_embeds = prefix_input_embeds
