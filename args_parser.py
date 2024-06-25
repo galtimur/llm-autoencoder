@@ -11,6 +11,7 @@ os.environ["NCCL_IB_DISABLE"] = "1"
 
 @dataclass
 class ModelArguments:
+    model_name_or_path: str = field(default=None)
     encoder_name_or_path: str = field(default=None)
     decoder_name_or_path: str = field(default=None)
     task_type: str = field(
@@ -185,6 +186,10 @@ def process_args(model_args, data_args, training_args) -> Tuple:
         model_args.use_linear_layer = False
 
     training_args.learning_rate = float(training_args.learning_rate)
+
+    if model_args.model_name_or_path is not None:
+        model_args.encoder_name_or_path = model_args.model_name_or_path
+        model_args.decoder_name_or_path = model_args.model_name_or_path
 
     if model_args.encoder_name_or_path != model_args.decoder_name_or_path:
         model_args.init_same_weights = False
