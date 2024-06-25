@@ -228,7 +228,9 @@ class AutoencoderLP(torch.nn.Module):
             self.trainable_modules.append(self.embed_compress)
 
         if self.model_args.use_linear_layer:
-            self.linear = nn.Linear(dim_enc, dim_dec, device=self.device, dtype=self.dtype)
+            self.linear = nn.Linear(
+                dim_enc, dim_dec, device=self.device, dtype=self.dtype
+            )
             if not self.model_args.freeze_linear:
                 self.trainable_modules.append(self.linear)
         else:
@@ -261,7 +263,9 @@ class AutoencoderLP(torch.nn.Module):
         #     print(f"Finished loading from {self.training_args.restore_from}")
 
     @staticmethod
-    def embed_tokens(input_ids: torch.LongTensor, model, has_lora: bool) -> torch.Tensor:
+    def embed_tokens(
+        input_ids: torch.LongTensor, model, has_lora: bool
+    ) -> torch.Tensor:
         if has_lora:
             input_embeds = model.get_base_model().model.embed_tokens(input_ids)
         else:
@@ -280,17 +284,25 @@ class AutoencoderLP(torch.nn.Module):
         summ_input_embeds = self.embed_summary(summ_tokens)
         sep_embed = self.embed_compress(self.sep_tok).repeat(batch_size, 1, 1)
 
-        if not "base" in self.task_type:
-            prefix_input_embeds = self.embed_tokens(prefix_ids, self.encoder, has_lora=self.model_args.lora_encoder)
+        if "base" not in self.task_type:
+            prefix_input_embeds = self.embed_tokens(
+                prefix_ids, self.encoder, has_lora=self.model_args.lora_encoder
+            )
         else:
-            prefix_input_embeds = self.embed_tokens(prefix_ids, self.decoder, has_lora=self.model_args.lora_decoder)
+            prefix_input_embeds = self.embed_tokens(
+                prefix_ids, self.decoder, has_lora=self.model_args.lora_decoder
+            )
 
         if self.task_type == "autoencoder" and self.same_models:
             suffix_input_embeds = prefix_input_embeds
         elif self.same_models:
-            suffix_input_embeds = self.embed_tokens(suffix_ids, self.encoder, has_lora=self.model_args.lora_encoder)
+            suffix_input_embeds = self.embed_tokens(
+                suffix_ids, self.encoder, has_lora=self.model_args.lora_encoder
+            )
         else:
-            suffix_input_embeds = self.embed_tokens(suffix_ids, self.decoder, has_lora=self.model_args.lora_decoder)
+            suffix_input_embeds = self.embed_tokens(
+                suffix_ids, self.decoder, has_lora=self.model_args.lora_decoder
+            )
 
         return prefix_input_embeds, suffix_input_embeds, summ_input_embeds, sep_embed
 
@@ -353,15 +365,18 @@ class AutoencoderLP(torch.nn.Module):
 
         return {"loss": loss, "logits": logits}
 
-
-    def generate(self, inputs: Tuple[torch.LongTensor, torch.LongTensor], max_new_tokens: int = 128, stop_list: set = {}) -> torch.LongTensor:
-
-        '''
+    def generate(
+        self,
+        inputs: Tuple[torch.LongTensor, torch.LongTensor],
+        max_new_tokens: int = 128,
+        stop_list: set = {},
+    ) -> torch.LongTensor:
+        """
         Written only batch_size = 1 because of the stop_list implementation
         inputs is Tuple[LongTensor, LongTensor] - prefix and suffix
         prefix - is a context for the generation. Can be compressed by Autocompressor or used directly by the model
         suffix - the main sequence from which the generation is performed
-        '''
+        """
 
         self.eval()
         stop_list.add(self.eos_id)
@@ -399,18 +414,20 @@ class AutoencoderLP(torch.nn.Module):
             decoder_outputs = self.decoder(
                 inputs_embeds=dec_input_embeds,
                 past_key_values=past_key_values,
-                use_cache=True
+                use_cache=True,
             )
             next_token_logits = decoder_outputs.logits[:, -1, :]
             next_token_id = torch.argmax(next_token_logits, dim=-1)
             generated_ids.append(next_token_id.unsqueeze(1))
 
-            next_token_embed = self.embed_tokens(next_token_id, self.decoder, has_lora=self.model_args.lora_decoder).unsqueeze(1)
+            next_token_embed = self.embed_tokens(
+                next_token_id, self.decoder, has_lora=self.model_args.lora_decoder
+            ).unsqueeze(1)
             dec_input_embeds = next_token_embed
 
             past_key_values = decoder_outputs.past_key_values
 
-            if next_token_id.item() in stop_list and n_symbols>0:
+            if next_token_id.item() in stop_list and n_symbols > 0:
                 break
             n_symbols += 1
 

@@ -47,6 +47,7 @@ def print_cpu_modules(model, device):
         except:
             pass
 
+
 def load_model_from_checkpoint(checkpoint_folder: str | Path) -> Dict:
     print("------- Loading the model from the checkpoint -------")
 
@@ -56,7 +57,7 @@ def load_model_from_checkpoint(checkpoint_folder: str | Path) -> Dict:
 
     args = parse_config(config_path)
     # First we load to cpu memory and then to the GPU to avoid memory overload
-    autoencoder = AutoencoderLP(args)#, device=torch.device("cpu")
+    autoencoder = AutoencoderLP(args)  # , device=torch.device("cpu")
     checkpoint = torch.load(checkpoint_path, map_location=torch.device("cpu"))
     autoencoder.load_state_dict(checkpoint["model_state_dict"])
     autoencoder = autoencoder.to(torch.device("cuda"))
@@ -204,7 +205,9 @@ class Trainer:
         )
         wandb.define_metric("Tokens")
         wandb.define_metric(f"{self.loss_prefix}loss vs tokens", step_metric="Tokens")
-        wandb.define_metric(f"{self.loss_prefix}val/loss vs tokens", step_metric="Tokens")
+        wandb.define_metric(
+            f"{self.loss_prefix}val/loss vs tokens", step_metric="Tokens"
+        )
         wandb.run.log_code(".")
 
     def set_train(self) -> None:
@@ -253,7 +256,10 @@ class Trainer:
                     if self.val_ce:
                         val_loss = self.validate_ce()
                         log_dict.update(
-                            {f"{self.loss_prefix}val/loss": val_loss, f"{self.loss_prefix}val/loss vs tokens": val_loss}
+                            {
+                                f"{self.loss_prefix}val/loss": val_loss,
+                                f"{self.loss_prefix}val/loss vs tokens": val_loss,
+                            }
                         )
                     if self.val_em:
                         em = self.validate_em()

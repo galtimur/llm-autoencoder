@@ -1,10 +1,10 @@
 from typing import Dict, List, Tuple
 
+import numpy as np
 import torch
 from datasets import load_dataset
-from torch.utils.data import DataLoader, Subset, RandomSampler
+from torch.utils.data import DataLoader, RandomSampler, Subset
 from transformers import AutoTokenizer
-import numpy as np
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -122,7 +122,7 @@ def get_dataloader(split: str, args: Dict, tokenizer: AutoTokenizer) -> DataLoad
         # I split the dataset not randomly, to avoid files from similar repositories.
         val_samples = training_args.max_eval_samples
         if split == "train":
-            sample_range = np.arange(len(dataset)-val_samples)
+            sample_range = np.arange(len(dataset) - val_samples)
         if split == "val":
             sample_range = np.arange(len(dataset) - val_samples, len(dataset))
         dataset = Subset(dataset, sample_range)
@@ -131,7 +131,10 @@ def get_dataloader(split: str, args: Dict, tokenizer: AutoTokenizer) -> DataLoad
     generator.manual_seed(data_args.rnd_seed)
 
     dataloader = DataLoader(
-        dataset, batch_size=batch_size_outer, sampler=RandomSampler(dataset, generator=generator), collate_fn=custom_batcher
+        dataset,
+        batch_size=batch_size_outer,
+        sampler=RandomSampler(dataset, generator=generator),
+        collate_fn=custom_batcher,
     )
 
     return dataloader

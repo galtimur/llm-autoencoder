@@ -4,7 +4,7 @@ import torch
 from datasets import load_dataset
 from torch.utils.data import Dataset
 from tqdm import tqdm
-from transformers.generation import StoppingCriteria, StoppingCriteriaList
+from transformers.generation import StoppingCriteria
 
 
 class LcaPythonCompletionDataset(Dataset):
@@ -47,7 +47,6 @@ class StopOnNewLine(StoppingCriteria):
 
 
 class FLCC_evaluator:
-
     def __init__(self, model, tokenizer):
         self.tokenizer = tokenizer
         self.model = model
@@ -61,9 +60,8 @@ class FLCC_evaluator:
         context_len: int,
         limit: int | None = None,
         log_negatives: bool = False,
-        model_name: str = ""
+        model_name: str = "",
     ) -> dict:
-
         device = self.model.device
         ds_test = LcaPythonCompletionDataset()
         full_ctx_len = summ_len + context_len
@@ -81,7 +79,6 @@ class FLCC_evaluator:
         for sample in tqdm(ds_test):
             input_ids = self.tokenizer.encode(sample["context"], return_tensors="pt")
             input_ids = input_ids[:, -full_ctx_len:].to(device)
-
 
             model_kwargs = {
                 "inputs": (input_ids[:, :summ_len], input_ids[:, -context_len:]),
