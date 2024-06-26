@@ -1,5 +1,7 @@
 import json
 from pathlib import Path
+import gc
+import torch
 
 from args_parser import parse_config
 from autoencoder import AutoencoderLP
@@ -7,13 +9,14 @@ from eval_lca_code_completion import FLCC_evaluator
 from train import load_model_from_checkpoint
 
 if __name__ == "__main__":
-    # ckpt_names = ["base", "base-no-cont", "auco-4x", "auco-10x"]
-    ckpt_names = [
-        "base",
-        "base_no_context",
-        "auco-4x-hybrid_DS-1.3-6.7",
-        "auco-10x-hybrid_DS-1.3-6.7",
-    ]  # "auco-10x-hybrid_DS-1.3-6.7", "base", "base_no_context",
+    ckpt_names = ["auco-4x", "auco-10x"]
+    # ckpt_names = ["base", "base_no_context"]
+    # ckpt_names = [
+        # "base",
+        # "base_no_context",
+        # "auco-4x-hybrid_DS-1.3-6.7",
+        #"auco-10x-hybrid_DS-1.3-6.7",
+    # ]  # "auco-10x-hybrid_DS-1.3-6.7", "base", "base_no_context",
     ckpt_main_folder = Path("/mnt/data2/galimzyanov/llm-autoencoder/output/")
     results_file = "val_CC_res.jsonl"
     config_path = "configs/config_code_base.yaml"
@@ -41,5 +44,13 @@ if __name__ == "__main__":
         )
         with open(results_file, "a") as f:
             f.write(json.dumps({ckpt_name: res}) + "\n")
+
+        try:
+            del model_checkpoint
+        except:
+            pass
+        del model
+        gc.collect()
+        torch.cuda.empty_cache()
 
         print(res["exact_match_rate"])
